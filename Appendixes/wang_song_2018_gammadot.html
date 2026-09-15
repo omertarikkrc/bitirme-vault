@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wang Song 2018 - gamma_dot Kuvvet Dengesi</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0f1117;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  padding: 20px;
+}
+h2  { font-size: 14px; color: #a78bfa; margin-bottom: 4px; }
+.sub { font-size: 11px; color: #6b7280; margin-bottom: 14px; line-height: 1.6; }
+canvas { display: block; max-width: 700px; border-radius: 8px; }
+.row { display: flex; align-items: center; gap: 12px; margin: 8px 0; max-width: 700px; }
+.lbl { font-size: 12px; white-space: nowrap; min-width: 72px; }
+input[type=range] { flex: 1; }
+.val { font-weight: 600; min-width: 52px; text-align: right; }
+.eq  {
+  font-size: 12px; color: #6b7280; margin-top: 10px; max-width: 700px;
+  background: rgba(255,255,255,0.03); padding: 10px 14px;
+  border-radius: 6px; border-left: 3px solid #a78bfa;
+  line-height: 1.9; font-family: monospace;
+}
+.note { font-size: 11px; color: #4b5563; margin-top: 8px; max-width: 700px; line-height: 1.7; }
+</style>
+</head>
+<body>
+
+<h2>Wang &amp; Song (2018) §2.1 Denklem 1d — Normal Eksen (ê_n) Kuvvet Dengesi: γ̇</h2>
+<div class="sub">
+  Newton 2. Yasa ê_n (hıza dik, normal eksen) üzerine yansıtılarak γ̇ denklemi elde edilir.<br>
+  Türetim: m·d(V·ê_t)/dt = F  →  ê_n bileşeni  →  mV·γ̇ = F·ê_n
+</div>
+
+<canvas id="cvs" width="700" height="450"></canvas>
+
+<div class="row">
+  <span class="lbl" style="color:#c084fc">γ açısı</span>
+  <input type="range" id="gsl" min="-90" max="0" value="-65" step="1"
+         style="accent-color:#c084fc">
+  <span class="val" id="gvl" style="color:#c084fc">-65°</span>
+</div>
+<div class="row">
+  <span class="lbl" style="color:#fbbf24">α açısı</span>
+  <input type="range" id="asl" min="-10" max="10" value="5" step="1"
+         style="accent-color:#fbbf24">
+  <span class="val" id="avl" style="color:#fbbf24">5°</span>
+</div>
+
+<div class="eq">
+  mV · γ̇  =  (−T sin α)  +  (−g cos γ / r²)<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    ↑ itki ê_n bileşeni &nbsp;&nbsp;&nbsp;&nbsp;↑ yerçekimi ê_n bileşeni<br>
+  <br>
+  Yansıtma adımı: m(V̇·ê_n·ê_t + Vγ̇·ê_n·ê_n) = F·ê_n<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    = 0 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= 1  &nbsp;→&nbsp; mVγ̇ = F·ê_n
+</div>
+
+<div class="note">
+  α referans ekseni: −ê_t (anti-velocity). α &gt; 0 → thrust −ê_n yönüne kayar → γ̇ &lt; 0.<br>
+  γ &lt; 0 için cos γ &gt; 0 → −g cos γ &lt; 0 → yerçekimi de −ê_n yönünde → ikisi birlikte γ'yı −90°'ye iter.
+</div>
+
+<script>
+(function () {
+  var cvs = document.getElementById('cvs');
+  var ctx = cvs.getContext('2d');
+  var gsl = document.getElementById('gsl');
+  var gvl = document.getElementById('gvl');
+  var asl = document.getElementById('asl');
+  var avl = document.getElementById('avl');
+
+  /* ─── renk paleti ─── */
+  var C = {
+    bg:   '#0f1117',
+    txt:  '#e2e8f0',
+    mut:  '#6b7280',
+    ax:   '#374151',
+    et:   '#f97316',   /* ê_t  turuncu */
+    en:   '#a78bfa',   /* ê_n  mor     */
+    T:    '#f87171',   /* itki kirmizi */
+    g:    '#818cf8',   /* yercekimi indigo */
+    Tc:   '#fca5a5',   /* -T sinα bileseni */
+    gc:   '#a5b4fc',   /* -g cosg bileseni */
+    arc_g:'#c084fc',
+    arc_a:'#fbbf24',
+    box:  'rgba(255,255,255,0.05)'
+  };
+
+  /* ─── yardımcı çizim fonksiyonları ─── */
+  function arrow(x1, y1, x2, y2, col, lw) {
+    lw = lw || 2.5;
+    var dx = x2 - x1, dy = y2 - y1;
+    var L  = Math.sqrt(dx * dx + dy * dy);
+    if (L < 2) return;
+    var ux = dx / L, uy = dy / L;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.setLineDash([]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - 11*ux + 4*uy, y2 - 11*uy - 4*ux);
+    ctx.lineTo(x2 - 11*ux - 4*uy, y2 - 11*uy + 4*ux);
+    ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+  }
+
+  function dash(x1, y1, x2, y2, col, lw) {
+    lw = lw || 1.5;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.setLineDash([5, 4]); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function label(s, x, y, col, sz, bold) {
+    sz   = sz   || 12;
+    bold = bold || false;
+    ctx.fillStyle = col;
+    ctx.font = (bold ? '600 ' : '') + sz + 'px sans-serif';
+    ctx.fillText(s, x, y);
+  }
+
+  function roundBox(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+
+  /* ─── ana çizim ─── */
+  function draw(gDeg, aDeg) {
+    ctx.clearRect(0, 0, 700, 450);
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, 700, 450);
+
+    var ox = 235, oy = 225, sc = 148;
+    var g = gDeg * Math.PI / 180;
+    var a = aDeg * Math.PI / 180;
+
+    /*
+      Eksen vektörleri (screen: x→sag, y→asagi)
+      ê_t screen = ( cos g ,  -sin g )   [gama<0 → sag-asagi]
+      ê_n screen = ( -sin g , -cos g )   [gama<0 → sag-yukari]
+    */
+    var etx =  Math.cos(g), ety = -Math.sin(g);
+    var enx = -Math.sin(g), eny = -Math.cos(g);
+
+    /* ── yerel yatay (ufuk) ── */
+    dash(ox - 175, oy, ox + 175, oy, C.ax, 1.2);
+    label('local ufuk', ox + 110, oy - 6, C.mut, 10);
+
+    /* ── origin ── */
+    ctx.beginPath(); ctx.arc(ox, oy, 4, 0, 2 * Math.PI);
+    ctx.fillStyle = C.txt; ctx.fill();
+
+    /* ── ê_t ekseni (soluk, referans) ── */
+    arrow(ox, oy, ox + sc * etx, oy + sc * ety, C.et, 1.5);
+    label('ê_t', ox + sc * etx + (etx > 0 ? 7 : -25), oy + sc * ety + 4, C.et, 12, true);
+
+    /* ── −ê_t referans çizgisi (alfa yayı için) ── */
+    dash(ox, oy, ox - sc * 0.45 * etx, oy - sc * 0.45 * ety, C.et, 1);
+
+    /* ── ê_n ekseni (ANA EKSEN — vurgulu) ── */
+    arrow(ox, oy, ox + sc * enx, oy + sc * eny, C.en, 2.5);
+    label('ê_n', ox + sc * enx + (enx > 0 ? 8 : -28),
+          oy + sc * eny + (eny < 0 ? -6 : 14), C.en, 13, true);
+
+    /* ── −ê_n yönü (kesik) ── */
+    var neg_sc = sc * 0.62;
+    dash(ox, oy, ox - neg_sc * enx, oy - neg_sc * eny, C.en, 1);
+    label('−ê_n', ox - neg_sc * enx + (-enx > 0 ? 6 : -32),
+          oy - neg_sc * eny + (-eny < 0 ? -5 : 14), C.en, 10);
+
+    /* ── yerçekimi g (düz aşağı) ── */
+    arrow(ox, oy, ox, oy + 108, C.g, 2.5);
+    label('g', ox + 7, oy + 106, C.g, 12, true);
+
+    /* ── itki T yönü ── */
+    /*
+      T screen = (−cos(g+a),  sin(g+a))
+      Bu formül: T = −cosα·ê_t − sinα·ê_n ifadesinden çıkar.
+    */
+    var Tdx = -Math.cos(g + a), Tdy = Math.sin(g + a);
+    arrow(ox, oy, ox + sc * Tdx, oy + sc * Tdy, C.T, 3);
+    var tlx = ox + sc * Tdx + (Tdx < 0 ? -60 : 8);
+    var tly = oy + sc * Tdy + (Tdy < 0 ? -6 : 16);
+    label('T (itki)', tlx, tly, C.T, 13, true);
+
+    /* ── alfa yayı: anti-ê_t ile T arasında ── */
+    if (Math.abs(aDeg) > 0.5) {
+      var antiEtA = Math.atan2(-ety, -etx);
+      var TA      = Math.atan2(Tdy, Tdx);
+      var ra = 40;
+      ctx.beginPath();
+      ctx.arc(ox, oy, ra, Math.min(antiEtA, TA), Math.max(antiEtA, TA));
+      ctx.strokeStyle = C.arc_a; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.stroke();
+      var midA = (antiEtA + TA) / 2;
+      label('α=' + aDeg + '°',
+        ox + (ra + 14) * Math.cos(midA) - 14,
+        oy + (ra + 14) * Math.sin(midA) + 4, C.arc_a, 11, true);
+    }
+
+    /* ── gama yayı: ufuk ile ê_t arasında ── */
+    var etA = Math.atan2(ety, etx);
+    if (Math.abs(etA) > 0.02) {
+      var rg = 62;
+      ctx.beginPath();
+      ctx.arc(ox, oy, rg, Math.min(0, etA), Math.max(0, etA));
+      ctx.strokeStyle = C.arc_g; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.stroke();
+      var midG = etA / 2;
+      label('γ=' + gDeg + '°',
+        ox + (rg + 18) * Math.cos(midG) - 16,
+        oy + (rg + 18) * Math.sin(midG) + 4, C.arc_g, 11, true);
+    }
+
+    /*
+      ── Kuvvet bileşenleri ê_n ekseninde ──
+      −T sinα → yön: +1 = ê_n, −1 = −ê_n
+      −g cosγ → aynı şekilde
+
+      İki bileşen kısmen birbiriyle örtüşür; biri kesik, biri noktalı
+      ile çizilir ve ê_t doğrultusunda küçük bir ofsetle ayrılır.
+    */
+    var Tv  = -Math.sin(a);           /* −T sinα değeri (α=+5 → ≈ −0.087) */
+    var gv  = -Math.cos(g);           /* −g cosγ değeri (γ=−65 → ≈ −0.423) */
+
+    /* skala faktörü: max bileşen 120 px olsun */
+    var maxVal = Math.max(Math.abs(Tv), Math.abs(gv), 0.01);
+    var scaleFactor = 110 / maxVal;
+
+    /* bileşen okları: ê_n yönünde çizilir (işaret yönü belirler) */
+    function compArrow(val, col, dashPat, offset_t) {
+      /* offset_t: ê_t yönünde kaç piksel sürükle */
+      var len = val * scaleFactor;   /* negatif → −ê_n yönü */
+      var ex = ox + offset_t * etx;
+      var ey = oy + offset_t * ety;
+      var ex2 = ex - len * enx;     /* -len*ê_n = len*(-ê_n) için negatif len */
+      var ey2 = ey - len * eny;
+
+      ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex2, ey2);
+      ctx.strokeStyle = col; ctx.lineWidth = 2.5;
+      ctx.setLineDash(dashPat); ctx.stroke(); ctx.setLineDash([]);
+
+      /* ok ucu */
+      var ddx = ex2 - ex, ddy = ey2 - ey;
+      var dL = Math.sqrt(ddx*ddx + ddy*ddy);
+      if (dL > 8) {
+        var dux = ddx/dL, duy = ddy/dL;
+        ctx.beginPath(); ctx.moveTo(ex2, ey2);
+        ctx.lineTo(ex2 - 10*dux + 4*duy, ey2 - 10*duy - 4*dux);
+        ctx.lineTo(ex2 - 10*dux - 4*duy, ey2 - 10*duy + 4*dux);
+        ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+      }
+      return { ex2: ex2, ey2: ey2 };
+    }
+
+    /* −T sinα bileşeni: 10px ê_t yönünde kaydır */
+    var Tres = compArrow(Tv, C.Tc, [], 10);
+    /* −g cosγ bileşeni: −10px ê_t yönünde kaydır (karşı taraf) */
+    var Gres = compArrow(gv, C.gc, [5, 3], -10);
+
+    /* bileşen etiketleri */
+    var Tpct = (Tv * 100).toFixed(0);
+    var Gpct = (gv * 100).toFixed(0);
+
+    /* T bileşen etiketi: ok ucunun yanına */
+    var tlbx = Tres.ex2 + (Tres.ex2 < ox ? -8 : 8);
+    var tlby = Tres.ey2 + (Tres.ey2 < oy ? -14 : 4);
+    label('−T sinα = ' + Tpct + '%', tlbx + (Tres.ex2 < ox ? -80 : 0), tlby, C.Tc, 11, true);
+
+    /* g bileşen etiketi */
+    var glbx = Gres.ex2 + (Gres.ex2 < ox ? -8 : 8);
+    var glby = Gres.ey2 + (Gres.ey2 < oy ? -28 : 18);
+    label('−g cosγ = ' + Gpct + '%', glbx + (Gres.ex2 < ox ? -80 : 0), glby, C.gc, 11, true);
+
+    /* ── Bilgi kutusu (sağ panel) ── */
+    var bx = 438, by = 18, bw = 252, bh = 320;
+    ctx.fillStyle = C.box; roundBox(bx, by, bw, bh, 8); ctx.fill();
+
+    label('Normal Eksen (ê_n) Dengesi:', bx+12, by+24, C.mut, 11, true);
+    label('mV · γ̇  =  F · ê_n', bx+12, by+40, C.txt, 12, true);
+    ctx.fillStyle = '#374151'; ctx.fillRect(bx+12, by+48, bw-24, 1);
+
+    label('ê_n bileşenleri:', bx+12, by+64, C.en, 11, true);
+
+    /* −T sinα satırı */
+    ctx.fillStyle = C.Tc; ctx.font = '500 12px sans-serif';
+    ctx.fillText('−T sinα  =  ' + Tpct + '%', bx+12, by+82);
+    var TdirTxt = Tv < -0.005 ? '−ê_n yönü  →  γ azalır ✓'
+                : Tv >  0.005 ? '+ê_n yönü  →  γ artar'
+                : '≈ 0  (saf frenleme)';
+    label('   ' + TdirTxt, bx+12, by+96, C.mut, 10);
+
+    /* −g cosγ satırı */
+    ctx.fillStyle = C.gc; ctx.font = '500 12px sans-serif';
+    ctx.fillText('−g cosγ  =  ' + Gpct + '%', bx+12, by+116);
+    var GdirTxt = gv < -0.005 ? '−ê_n yönü  →  γ azalır ✓'
+                : gv >  0.005 ? '+ê_n yönü  →  γ artar'
+                : '≈ 0';
+    label('   ' + GdirTxt, bx+12, by+130, C.mut, 10);
+
+    ctx.fillStyle = '#374151'; ctx.fillRect(bx+12, by+140, bw-24, 1);
+
+    /* toplam ve sonuç */
+    var total = Tv + gv;
+    var sign  = total < -0.01 ? '< 0  →  γ azalır' : total > 0.01 ? '> 0  →  γ artar' : '≈ 0';
+    ctx.fillStyle = C.arc_g; ctx.font = '600 12px sans-serif';
+    ctx.fillText('Toplam: γ̇  ' + sign, bx+12, by+158);
+    var heading = total < -0.005 ? '−90°ye doğru kıvrılıyor ✓' : '+90°den uzaklaşıyor';
+    label('  Yörünge: ' + heading, bx+12, by+172, C.mut, 10);
+
+    ctx.fillStyle = '#374151'; ctx.fillRect(bx+12, by+182, bw-24, 1);
+
+    /* kritik zincir */
+    label('Kritik zincir (α > 0):', bx+12, by+200, C.arc_a, 11, true);
+    label('α > 0', bx+16, by+218, C.arc_a, 11);
+    label('  → −T sinα < 0', bx+16, by+234, C.Tc, 11);
+    label('  → γ̇ < 0', bx+16, by+250, C.arc_g, 11);
+    label('  → γ → −90°  ✓', bx+16, by+266, C.en, 11);
+
+    ctx.fillStyle = '#374151'; ctx.fillRect(bx+12, by+274, bw-24, 1);
+
+    /* mevcut değerler */
+    label('γ = ' + gDeg + '°,   α = ' + aDeg + '°', bx+12, by+292, C.mut, 10);
+    label('mV·γ̇  ∝  ' + (total*100).toFixed(0) + '%  (boyutsuz, T=g=1)', bx+12, by+308, C.mut, 10);
+
+    /* alt not */
+    label('Renk kodu: turuncu=ê_t  mor=ê_n  kırmızı=T  indigo=g', 12, 442, C.mut, 10);
+  }
+
+  function update() {
+    var gv = parseInt(gsl.value, 10);
+    var av = parseInt(asl.value, 10);
+    gvl.textContent = gv + '°';
+    avl.textContent = av + '°';
+    draw(gv, av);
+  }
+
+  gsl.addEventListener('input', update);
+  asl.addEventListener('input', update);
+  update();
+})();
+</script>
+</body>
+</html>

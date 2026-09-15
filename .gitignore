@@ -1,0 +1,19 @@
+# Obsidian'in surekli degisen ayar dosyalari
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+
+# Obsidian'in cop kutusu
+.trash/
+
+# Zotero PDF'leri — telif + boyut
+*.pdf
+
+# Buyuk medya dosyalari
+*.mp4
+*.gif
+
+# Isletim sistemi celp dosyalari
+.DS_Store
+Thumbs.db
+desktop.ini

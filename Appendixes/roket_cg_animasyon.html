@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Angara 1.2 — CG Animation</title>
+<link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #fff; color: #1a1a1a; padding: 1rem; }
+  @media (prefers-color-scheme: dark) { body { background: #1e1e1e; color: #e0e0e0; } }
+  .card { background: #f5f5f3; border-radius: 8px; padding: 0.75rem 1rem; }
+  @media (prefers-color-scheme: dark) { .card { background: #2a2a2a; } }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.25rem; }
+  .label { font-size: 12px; color: #888; margin-bottom: 3px; }
+  .value { font-size: 20px; font-weight: 500; }
+  .unit  { font-size: 11px; color: #aaa; margin-top: 2px; }
+  .legend-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .slider-wrap { margin-bottom: 0.75rem; }
+  .slider-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .slider-footer { display: flex; justify-content: space-between; margin-top: 2px; }
+  .hint { font-size: 11px; color: #aaa; }
+  input[type=range] { width: 100%; accent-color: #1D9E75; }
+  .btn-row { display: flex; gap: 8px; margin-top: 1rem; }
+  button { flex: 1; padding: 8px; font-size: 13px; cursor: pointer; background: transparent; border: 0.5px solid #ccc; border-radius: 8px; color: inherit; transition: background 0.15s; }
+  button:hover { background: rgba(0,0,0,0.06); }
+  @media (prefers-color-scheme: dark) { button { border-color: #555; } button:hover { background: rgba(255,255,255,0.08); } }
+  .layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+  canvas { display: block; }
+  .right { flex: 1; min-width: 260px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <div>
+    <canvas id="rocketCanvas" width="160" height="480"></canvas>
+  </div>
+  <div class="right">
+    <div class="grid2">
+      <div class="card">
+        <div class="label">total mass</div>
+        <div class="value" id="m-tot">—</div>
+        <div class="unit">kg</div>
+      </div>
+      <div class="card">
+        <div class="label">total CG</div>
+        <div class="value" id="cg-val">—</div>
+        <div class="unit">m (from nozzle)</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:1.25rem;">
+      <div class="legend-row">
+        <span class="dot" style="background:#E24B4A;"></span>
+        <span style="font-size:13px;color:#888;width:110px;">oxidiser CG</span>
+        <span style="font-size:13px;font-weight:500;" id="cgo-val">—</span>
+        <span style="font-size:11px;color:#aaa;">m &nbsp;</span>
+        <span style="font-size:11px;color:#aaa;" id="mo-val"></span>
+      </div>
+      <div class="legend-row">
+        <span class="dot" style="background:#378ADD;"></span>
+        <span style="font-size:13px;color:#888;width:110px;">fuel CG</span>
+        <span style="font-size:13px;font-weight:500;" id="cgf-val">—</span>
+        <span style="font-size:11px;color:#aaa;">m &nbsp;</span>
+        <span style="font-size:11px;color:#aaa;" id="mf-val"></span>
+      </div>
+      <div class="legend-row">
+        <span class="dot" style="background:#888;"></span>
+        <span style="font-size:13px;color:#888;width:110px;">structural CG</span>
+        <span style="font-size:13px;font-weight:500;">24.73 m &nbsp; 39 812 kg (fixed)</span>
+      </div>
+      <div class="legend-row">
+        <canvas id="legendCG" width="14" height="14" style="flex-shrink:0;border-radius:50%;"></canvas>
+        <span style="font-size:13px;color:#888;width:110px;">total CG</span>
+        <span style="font-size:13px;font-weight:500;" id="cg-val2">—</span>
+        <span style="font-size:11px;color:#aaa;">m</span>
+      </div>
+    </div>
+
+    <div class="slider-wrap">
+      <div class="slider-header">
+        <label style="font-size:13px;color:#888;">time</label>
+        <span style="font-size:13px;font-weight:500;" id="t-out">t = 0 s</span>
+      </div>
+      <input type="range" min="0" max="240" step="1" value="0" id="t-slider">
+      <div class="slider-footer">
+        <span class="hint">0 s</span>
+        <span class="hint">240 s (burnout)</span>
+      </div>
+    </div>
+
+    <div class="slider-wrap">
+      <div class="slider-header">
+        <label style="font-size:13px;color:#888;">propellant</label>
+        <span style="font-size:13px;font-weight:500;" id="mp-out">128 000 kg</span>
+      </div>
+      <input type="range" min="0" max="128000" step="100" value="128000" id="mp-slider">
+    </div>
+
+    <div class="btn-row">
+      <button id="playBtn" onclick="togglePlay()">▶ play</button>
+      <button onclick="resetSim()">↺ reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const m_s=39812,z_CG_s=24.73;
+const m_f_ini=35262,m_o_ini=92738,m_p_ini=128000,m_tot_ini=39812+128000;
+const alfa_f=2.63,mp_dot=533.33;
+const z_CG_f_ini=7.45,z_CG_f_fin=5.10;
+const z_CG_o_ini=18.50,z_CG_o_fin=10.00;
+const L_s=41.0;
+
+function calcState(mp){
+  const mf=mp*(1/(1+alfa_f));
+  const mo=mp*(alfa_f/(1+alfa_f));
+  const zcg_f=z_CG_f_fin+(z_CG_f_ini-z_CG_f_fin)*(mf/m_f_ini);
+  const zcg_o=z_CG_o_fin+(z_CG_o_ini-z_CG_o_fin)*(mo/m_o_ini);
+  const m_tot=m_s+mf+mo;
+  const zcg=(m_s*z_CG_s+mf*zcg_f+mo*zcg_o)/m_tot;
+  return {mf,mo,zcg_f,zcg_o,m_tot,zcg};
+}
+
+function drawQuarterCircle(c,cx,cy,r){
+  c.beginPath(); c.arc(cx,cy,r,0,Math.PI*2);
+  c.fillStyle='#1a1a1a'; c.fill();
+  c.beginPath(); c.moveTo(cx,cy); c.arc(cx,cy,r,-Math.PI/2,0); c.closePath();
+  c.fillStyle='#F5C400'; c.fill();
+  c.beginPath(); c.moveTo(cx,cy); c.arc(cx,cy,r,Math.PI/2,Math.PI); c.closePath();
+  c.fillStyle='#F5C400'; c.fill();
+  c.beginPath(); c.arc(cx,cy,r,0,Math.PI*2);
+  c.strokeStyle='#555'; c.lineWidth=1; c.stroke();
+}
+
+const canvas=document.getElementById('rocketCanvas');
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+function mToY(m){ return H-30-(m/L_s)*(H-80); }
+function massToR(m,maxM){ return 5+(m/maxM)*15; }
+
+function drawRocket(state){
+  ctx.clearRect(0,0,W,H);
+  const isDark=matchMedia('(prefers-color-scheme: dark)').matches;
+  const bodyColor=isDark?'#3C3489':'#CECBF6';
+  const bodyStroke=isDark?'#7F77DD':'#534AB7';
+  const nozzleColor=isDark?'#444441':'#D3D1C7';
+  const textColor=isDark?'#B4B2A9':'#5F5E5A';
+  const gridColor=isDark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)';
+  const cx=W/2,bw=36,bodyTop=mToY(L_s),bodyBot=mToY(0),noseH=40;
+
+  ctx.strokeStyle=gridColor; ctx.lineWidth=0.5;
+  for(let m=0;m<=40;m+=5){
+    const y=mToY(m);
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    ctx.fillStyle=textColor; ctx.font='10px sans-serif'; ctx.textAlign='left';
+    ctx.fillText(m+'m',2,y-2);
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(cx-bw/2-6,bodyBot); ctx.lineTo(cx-bw/2+4,bodyBot+22);
+  ctx.lineTo(cx+bw/2-4,bodyBot+22); ctx.lineTo(cx+bw/2+6,bodyBot);
+  ctx.closePath(); ctx.fillStyle=nozzleColor; ctx.fill();
+  ctx.strokeStyle=bodyStroke; ctx.lineWidth=1; ctx.stroke();
+
+  ctx.beginPath(); ctx.rect(cx-bw/2,bodyTop,bw,bodyBot-bodyTop);
+  ctx.fillStyle=bodyColor; ctx.fill();
+  ctx.strokeStyle=bodyStroke; ctx.lineWidth=1.5; ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx-bw/2,bodyTop); ctx.lineTo(cx,bodyTop-noseH); ctx.lineTo(cx+bw/2,bodyTop);
+  ctx.closePath(); ctx.fillStyle=bodyColor; ctx.fill();
+  ctx.strokeStyle=bodyStroke; ctx.lineWidth=1.5; ctx.stroke();
+
+  [[cx-bw/2,cx-bw/2-14],[cx+bw/2,cx+bw/2+14]].forEach(([x1,x2])=>{
+    const finY=bodyBot-18;
+    ctx.beginPath(); ctx.moveTo(x1,finY); ctx.lineTo(x2,bodyBot+4); ctx.lineTo(x1,bodyBot);
+    ctx.closePath(); ctx.fillStyle=bodyColor; ctx.fill();
+    ctx.strokeStyle=bodyStroke; ctx.lineWidth=1; ctx.stroke();
+  });
+
+  const roR=massToR(state.mo,m_o_ini),yOx=mToY(state.zcg_o);
+  ctx.beginPath(); ctx.arc(cx,yOx,roR,0,Math.PI*2);
+  ctx.fillStyle='rgba(226,75,74,0.82)'; ctx.fill();
+  ctx.strokeStyle='#A32D2D'; ctx.lineWidth=1.5; ctx.stroke();
+
+  const rfB=massToR(state.mf,m_f_ini),yFuel=mToY(state.zcg_f);
+  ctx.beginPath(); ctx.arc(cx,yFuel,rfB,0,Math.PI*2);
+  ctx.fillStyle='rgba(55,138,221,0.82)'; ctx.fill();
+  ctx.strokeStyle='#185FA5'; ctx.lineWidth=1.5; ctx.stroke();
+
+  const yStr=mToY(z_CG_s);
+  ctx.beginPath(); ctx.arc(cx,yStr,10,0,Math.PI*2);
+  ctx.fillStyle='rgba(136,135,128,0.6)'; ctx.fill();
+  ctx.strokeStyle='#5F5E5A'; ctx.lineWidth=1.5; ctx.stroke();
+
+  const yCG=mToY(state.zcg),rCG=6+(state.m_tot/m_tot_ini)*12;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(0,yCG); ctx.lineTo(W,yCG);
+  ctx.strokeStyle=isDark?'rgba(245,196,0,0.45)':'rgba(26,26,26,0.3)';
+  ctx.lineWidth=1; ctx.stroke();
+  ctx.setLineDash([]);
+  drawQuarterCircle(ctx,cx,yCG,rCG);
+}
+
+function drawLegendIcon(){
+  const lc=document.getElementById('legendCG');
+  if(!lc) return;
+  const lctx=lc.getContext('2d');
+  lctx.clearRect(0,0,14,14);
+  drawQuarterCircle(lctx,7,7,6);
+}
+
+function updateUI(t){
+  const mp=Math.max(0,m_p_ini-mp_dot*t);
+  const s=calcState(mp);
+  document.getElementById('t-slider').value=t;
+  document.getElementById('mp-slider').value=mp;
+  document.getElementById('t-out').textContent='t = '+Math.round(t)+' s';
+  document.getElementById('mp-out').textContent=Math.round(mp).toLocaleString()+' kg';
+  document.getElementById('m-tot').textContent=Math.round(s.m_tot).toLocaleString();
+  document.getElementById('cg-val').textContent=s.zcg.toFixed(2);
+  document.getElementById('cg-val2').textContent=s.zcg.toFixed(2);
+  document.getElementById('cgo-val').textContent=s.zcg_o.toFixed(2);
+  document.getElementById('cgf-val').textContent=s.zcg_f.toFixed(2);
+  document.getElementById('mo-val').textContent=Math.round(s.mo).toLocaleString()+' kg';
+  document.getElementById('mf-val').textContent=Math.round(s.mf).toLocaleString()+' kg';
+  drawRocket(s);
+  drawLegendIcon();
+}
+
+let playing=false,animT=0,lastTs=null,rafId=null;
+
+function togglePlay(){
+  playing=!playing;
+  const btn=document.getElementById('playBtn');
+  if(playing){
+    btn.textContent='⏸ pause'; lastTs=null; rafId=requestAnimationFrame(animate);
+  } else {
+    btn.textContent='▶ play'; cancelAnimationFrame(rafId);
+  }
+}
+
+function animate(ts){
+  if(!lastTs) lastTs=ts;
+  animT=Math.min(240,animT+(ts-lastTs)/1000*4);
+  lastTs=ts;
+  updateUI(animT);
+  if(animT>=240){ playing=false; document.getElementById('playBtn').textContent='▶ play'; return; }
+  rafId=requestAnimationFrame(animate);
+}
+
+function resetSim(){
+  playing=false; animT=0; cancelAnimationFrame(rafId);
+  document.getElementById('playBtn').textContent='▶ play';
+  updateUI(0);
+}
+
+document.getElementById('t-slider').addEventListener('input',function(){ animT=parseFloat(this.value); updateUI(animT); });
+document.getElementById('mp-slider').addEventListener('input',function(){ animT=Math.round((m_p_ini-parseFloat(this.value))/mp_dot); updateUI(animT); });
+
+updateUI(0);
+</script>
+</body>
+</html>

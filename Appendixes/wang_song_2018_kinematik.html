@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wang Song 2018 - r_dot ve s_dot Geometrisi</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0f1117; color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  padding: 20px;
+}
+h2 { font-size: 14px; color: #a78bfa; margin-bottom: 4px; }
+.sub { font-size: 11px; color: #6b7280; margin-bottom: 14px; line-height: 1.6; }
+canvas { display: block; max-width: 680px; border-radius: 8px; }
+.ctrl { display: flex; align-items: center; gap: 12px; margin: 10px 0; max-width: 680px; }
+.cl { font-size: 13px; color: #9ca3af; white-space: nowrap; min-width: 80px; }
+input[type=range] { flex: 1; accent-color: #c084fc; }
+.cv { font-weight: 600; color: #c084fc; min-width: 56px; text-align: right; }
+.note { font-size: 11px; color: #4b5563; max-width: 680px; line-height: 1.7; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<h2>Wang &amp; Song (2018) Denklem 1a-1b: r_dot = V*sin(g) ve s_dot = V*cos(g)</h2>
+<div class="sub">
+  Hiz vektoru V, yatay s-ekseniyle gamma acisi yaparak dikey (r_dot) ve yatay (s_dot) bilesenlere ayrisiyor.<br>
+  g = flight path angle | Asagi inis = negatif gamma
+</div>
+
+<canvas id="cvs" width="680" height="420"></canvas>
+
+<div class="ctrl">
+  <span class="cl">gamma (g)</span>
+  <input type="range" id="gsl" min="-90" max="15" value="-65" step="1">
+  <span class="cv" id="gvl">-65 deg</span>
+</div>
+
+<div class="note">
+  g = 0 deg  : saf yatay hareket  (r_dot=0, s_dot=V) <br>
+  g = -90 deg : saf dikey inis   (r_dot=-V, s_dot=0) <br>
+  Baslangic kosulu: g0 = -65 deg | Terminal hedef: gf = -90 deg
+</div>
+
+<script>
+(function(){
+  var cvs = document.getElementById('cvs');
+  var ctx = cvs.getContext('2d');
+  var gsl = document.getElementById('gsl');
+  var gvl = document.getElementById('gvl');
+
+  var C = {
+    bg:  '#0f1117',
+    ax:  '#374151',
+    txt: '#e2e8f0',
+    mut: '#6b7280',
+    V:   '#f59e0b',
+    R:   '#60a5fa',
+    S:   '#4ade80',
+    arc: '#c084fc',
+    box: 'rgba(255,255,255,0.05)'
+  };
+
+  function arw(x1, y1, x2, y2, col, lw) {
+    lw = lw || 2;
+    var dx = x2-x1, dy = y2-y1, L = Math.sqrt(dx*dx+dy*dy);
+    if (L < 2) return;
+    var ux = dx/L, uy = dy/L;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.setLineDash([]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-10*ux+4*uy, y2-10*uy-4*ux);
+    ctx.lineTo(x2-10*ux-4*uy, y2-10*uy+4*ux);
+    ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+  }
+
+  function txt(s, x, y, col, sz, w) {
+    sz = sz || 13; w = w || '400';
+    ctx.fillStyle = col; ctx.font = w+' '+sz+'px sans-serif'; ctx.fillText(s, x, y);
+  }
+
+  function rbox(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+    ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+    ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
+    ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
+    ctx.closePath();
+  }
+
+  function draw(gDeg) {
+    ctx.clearRect(0, 0, 680, 420);
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, 680, 420);
+
+    var ox = 155, oy = 200, sc = 155;
+    var g = gDeg * Math.PI / 180;
+
+    // === AXES ===
+    arw(20, oy, 340, oy, C.ax, 1.5);
+    txt('s  (yatay)', 316, oy-12, C.mut, 12);
+    arw(ox, 390, ox, 20, C.ax, 1.5);
+    txt('r  (dikey)', ox+8, 34, C.mut, 12);
+    // Axis ticks
+    ctx.fillStyle = C.mut; ctx.font = '10px sans-serif';
+    ctx.fillText('+', ox-5, oy-sc+4);
+    ctx.fillText('+', ox+sc-4, oy+4);
+
+    // === V TIP (screen coords) ===
+    // Screen: x=s(right), y=-r(down)
+    // V screen direction: (cos(g), -sin(g))
+    var Vx = ox + sc * Math.cos(g);
+    var Vy = oy - sc * Math.sin(g);
+
+    // Corner of decomposition rectangle
+    var Cx = Vx, Cy = oy;
+
+    // === S_DOT component (horizontal, green) ===
+    var hasSdot = Math.abs(Math.cos(g)) > 0.01;
+    if (hasSdot) {
+      arw(ox, oy, Cx, Cy, C.S, 2.5);
+    }
+
+    // === R_DOT component (vertical, blue) ===
+    var hasRdot = Math.abs(Math.sin(g)) > 0.01;
+    if (hasRdot) {
+      arw(Cx, Cy, Vx, Vy, C.R, 2.5);
+    }
+
+    // === Right-angle marker at corner ===
+    if (hasSdot && hasRdot) {
+      var rs = 10;
+      var hx = Math.cos(g) > 0 ? -rs : rs;
+      var vy2 = Vy < Cy ? -rs : rs;
+      ctx.beginPath();
+      ctx.moveTo(Cx+hx, Cy);
+      ctx.lineTo(Cx+hx, Cy+vy2);
+      ctx.lineTo(Cx, Cy+vy2);
+      ctx.strokeStyle = C.mut; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.stroke();
+    }
+
+    // === V VECTOR (amber, on top) ===
+    arw(ox, oy, Vx, Vy, C.V, 3);
+
+    // === GAMMA ARC ===
+    var arcR = 65;
+    if (Math.abs(gDeg) > 1) {
+      var a0 = 0, a1 = -g;
+      ctx.beginPath();
+      ctx.arc(ox, oy, arcR, Math.min(a0,a1), Math.max(a0,a1));
+      ctx.strokeStyle = C.arc; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.stroke();
+    }
+
+    // Gamma label - placed carefully
+    var midA = -g / 2;
+    var gLabelR = arcR + 22;
+    var gLx = ox + gLabelR * Math.cos(midA);
+    var gLy = oy + gLabelR * Math.sin(midA);
+    if (gDeg < -5) {
+      txt('g='+gDeg, gLx-38, gLy+12, C.arc, 12, '500');
+    } else if (gDeg > 5) {
+      txt('g='+gDeg, gLx+4, gLy-4, C.arc, 12, '500');
+    } else {
+      txt('g=0', ox+arcR+8, oy-6, C.arc, 12, '500');
+    }
+
+    // === V LABEL ===
+    var vlx = Vx + (Math.cos(g) >= 0 ? 10 : -38);
+    var vly = Vy + (gDeg < 0 ? 16 : -8);
+    txt('V', vlx, vly, C.V, 15, '700');
+
+    // === S_DOT LABEL ===
+    if (hasSdot) {
+      var smx = (ox + Cx) / 2;
+      var sly = oy + (gDeg <= 0 ? 22 : -14);
+      txt('s_dot = V*cos(g)', smx-58, sly, C.S, 12, '500');
+      txt('= '+(Math.cos(g)*100).toFixed(0)+'% of V', smx-32, sly+14, C.S, 10);
+    }
+
+    // === R_DOT LABEL ===
+    if (hasRdot) {
+      var rmy = (Cy + Vy) / 2;
+      var rlx = Vx + (Math.cos(g) >= 0 ? 12 : -105);
+      txt('r_dot = V*sin(g)', rlx, rmy-4, C.R, 12, '500');
+      txt('= '+(Math.sin(g)*100).toFixed(0)+'% of V', rlx, rmy+10, C.R, 10);
+    }
+
+    // === SPECIAL CASES ===
+    if (Math.abs(gDeg) < 2) {
+      txt('r_dot = 0  (yatay ucus!)', ox+10, oy-20, C.R, 12, '500');
+    }
+    if (Math.abs(gDeg+90) < 2) {
+      txt('s_dot = 0  (tam dikey inis!)', ox+10, oy+20, C.S, 12, '500');
+    }
+
+    // === ORIGIN DOT ===
+    ctx.beginPath(); ctx.arc(ox, oy, 4, 0, Math.PI*2);
+    ctx.fillStyle = C.txt; ctx.fill();
+    txt('O', ox-16, oy+16, C.mut, 11);
+
+    // === INFO BOX (right side) ===
+    var bx=356, by=18, bw=310, bh=172;
+    ctx.fillStyle = C.box;
+    rbox(bx, by, bw, bh, 8);
+    ctx.fill();
+
+    txt('Denklem 1a-1b  |  gamma = '+gDeg+' deg', bx+12, by+20, C.mut, 11);
+
+    ctx.fillStyle = C.S; ctx.font = '500 13px sans-serif';
+    ctx.fillText('s_dot  =  V * cos(g)', bx+12, by+44);
+    ctx.fillStyle = C.mut; ctx.font = '11px sans-serif';
+    ctx.fillText('= '+(Math.cos(g)*100).toFixed(1)+'%  of V', bx+12, by+58);
+    ctx.fillText('Yatay hiz bileseni  (s yonunde)', bx+12, by+72);
+
+    ctx.fillStyle = C.R; ctx.font = '500 13px sans-serif';
+    ctx.fillText('r_dot  =  V * sin(g)', bx+12, by+96);
+    ctx.fillStyle = C.mut; ctx.font = '11px sans-serif';
+    ctx.fillText('= '+(Math.sin(g)*100).toFixed(1)+'%  of V', bx+12, by+110);
+    var rdNote = gDeg < 0 ? 'Dikey hiz bileseni  (asagi inis)' : gDeg > 0 ? 'Dikey hiz bileseni  (yukari)' : 'Dikey bilesenin sifir  (yatay)';
+    ctx.fillText(rdNote, bx+12, by+124);
+
+    ctx.fillStyle = C.V; ctx.font = '500 12px sans-serif';
+    ctx.fillText('V^2  =  r_dot^2  +  s_dot^2', bx+12, by+148);
+    ctx.fillStyle = C.mut; ctx.font = '11px sans-serif';
+    ctx.fillText('Pitagor: buyukluk korunuyor.', bx+12, by+162);
+
+    // Bottom note
+    txt('gamma: yatay s-ekseninden olculen aci.  Asagi inis = negatif.', 14, 410, C.mut, 11);
+  }
+
+  gsl.addEventListener('input', function() {
+    var v = parseInt(this.value, 10);
+    gvl.textContent = v + ' deg';
+    draw(v);
+  });
+
+  draw(-65);
+})();
+</script>
+</body>
+</html>

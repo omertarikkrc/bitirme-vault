@@ -1,0 +1,25 @@
+{
+  "database": "Zotero",
+  "noteImportFolder": "",
+  "pdfExportImageDPI": 120,
+  "pdfExportImageFormat": "jpg",
+  "pdfExportImageQuality": 90,
+  "citeFormats": [
+    {
+      "name": "AIAA",
+      "format": "formatted-bibliography"
+    }
+  ],
+  "exportFormats": [
+    {
+      "name": "References",
+      "outputPathTemplate": "Referanslar/{{citekey}}.md",
+      "imageOutputPathTemplate": "{{citekey}}/",
+      "imageBaseNameTemplate": "image",
+      "templatePath": "Templates/Makale Template.md"
+    }
+  ],
+  "citeSuggestTemplate": "[[{{citekey}}]]",
+  "openNoteAfterImport": true,
+  "whichNotesToOpenAfterImport": "first-imported-note"
+}

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wang &amp; Song (2018) - Alpha Angle Geometry</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0f1117;
+    color: #e2e8f0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 20px;
+    min-height: 100vh;
+  }
+  h2 { font-size: 15px; font-weight: 600; color: #a78bfa; margin-bottom: 4px; }
+  .subtitle { font-size: 11px; color: #6b7280; margin-bottom: 14px; line-height: 1.6; }
+  canvas { display: block; width: 100%; max-width: 680px; border-radius: 8px; }
+  .controls {
+    display: flex; align-items: center; gap: 12px;
+    margin: 12px 0 4px; max-width: 680px;
+  }
+  .ctrl-label { font-size: 13px; color: #9ca3af; white-space: nowrap; min-width: 70px; }
+  input[type=range] {
+    flex: 1; height: 4px; cursor: pointer;
+    accent-color: #a78bfa;
+  }
+  .ctrl-val { font-size: 14px; font-weight: 600; color: #a78bfa; min-width: 52px; text-align: right; }
+  .equation {
+    font-size: 12px; color: #6b7280; margin-top: 8px; max-width: 680px;
+    background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 6px;
+    border-left: 3px solid #a78bfa;
+  }
+  .eq-line { margin: 2px 0; font-family: monospace; letter-spacing: 0.3px; }
+  .note { font-size: 11px; color: #4b5563; margin-top: 10px; max-width: 680px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h2>Wang &amp; Song (2018) - Alpha Angle Geometry (Section 2.1)</h2>
+<div class="subtitle">
+  Denklem 1 geometrisi. Nozul = kuvvet kaynagi. Govde = thrust yonu. Gamma = -90 deg (dikey inis).
+</div>
+
+<canvas id="mainCanvas" width="680" height="420"></canvas>
+
+<div class="controls">
+  <span class="ctrl-label">alfa (a)</span>
+  <input type="range" id="alphaSlider" min="-12" max="12" value="7" step="1">
+  <span class="ctrl-val" id="alphaVal">7 deg</span>
+</div>
+
+<div class="equation">
+  <div class="eq-line">V_dot = (-T*cos(a) - D) / m  -  sin(g) / r^2</div>
+  <div class="eq-line">g_dot = -T*sin(a) / (m*V)  -  cos(g) / (r^2 * V)</div>
+  <div class="eq-line">m_dot = -T / Isp</div>
+</div>
+
+<div class="note">
+  Referans ekseni: -V yonu (anti-velocity, yukari).<br>
+  a &gt; 0: thrust sola (-s yonune) &rarr; g_dot &lt; 0 &rarr; gamma azalir &rarr; yorum -90 dereceye kivrili &rarr; Denklem 1 ile tutarli.<br>
+  a_safe = 2 deg | a_min = -10 deg | a_max = +10 deg
+</div>
+
+<script>
+(function() {
+  var canvas = document.getElementById('mainCanvas');
+  var ctx = canvas.getContext('2d');
+  var slider = document.getElementById('alphaSlider');
+  var valSpan = document.getElementById('alphaVal');
+
+  var C = {
+    text:  '#e2e8f0',
+    muted: '#6b7280',
+    ref:   '#374151',
+    v:     '#60a5fa',
+    t:     '#f87171',
+    cosC:  '#4ade80',
+    sinC:  '#fb923c',
+    arc:   '#c084fc',
+    rkt:   '#64748b',
+    rkt2:  '#475569',
+    box:   'rgba(255,255,255,0.05)'
+  };
+
+  function arrow(x1, y1, x2, y2, col, lw) {
+    lw = lw || 2.5;
+    var dx = x2-x1, dy = y2-y1;
+    var len = Math.sqrt(dx*dx + dy*dy);
+    if (len < 2) return;
+    var ux = dx/len, uy = dy/len;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.setLineDash([]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - 11*ux + 5*uy, y2 - 11*uy - 5*ux);
+    ctx.lineTo(x2 - 11*ux - 5*uy, y2 - 11*uy + 5*ux);
+    ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+  }
+
+  function dash(x1, y1, x2, y2, col, lw) {
+    lw = lw || 1.5;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.setLineDash([5,4]); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function text(s, x, y, col, sz, w) {
+    sz = sz || 13; w = w || '400';
+    ctx.fillStyle = col; ctx.font = w + ' ' + sz + 'px sans-serif'; ctx.fillText(s, x, y);
+  }
+
+  function rocket(cx, cy, ang) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(ang);
+    ctx.beginPath(); ctx.rect(-11, -66, 22, 56); ctx.fillStyle = C.rkt; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-11,-66); ctx.lineTo(0,-88); ctx.lineTo(11,-66);
+    ctx.closePath(); ctx.fillStyle = C.rkt2; ctx.fill();
+    var ss = [-1, 1];
+    for (var i = 0; i < 2; i++) {
+      var s = ss[i];
+      ctx.beginPath(); ctx.moveTo(s*11,-14); ctx.lineTo(s*23,2); ctx.lineTo(s*11,-6);
+      ctx.closePath(); ctx.fillStyle = C.rkt2; ctx.fill();
+    }
+    ctx.beginPath(); ctx.moveTo(-9,-10); ctx.lineTo(-11,0); ctx.lineTo(11,0); ctx.lineTo(9,-10);
+    ctx.closePath(); ctx.fillStyle = '#2d3748'; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-6,0); ctx.quadraticCurveTo(-4,16,0,22); ctx.quadraticCurveTo(4,16,6,0);
+    ctx.closePath();
+    var g = ctx.createLinearGradient(cx - cx, 0, cx - cx, 22);
+    g.addColorStop(0, '#f97316'); g.addColorStop(1, '#fbbf24');
+    ctx.fillStyle = g; ctx.globalAlpha = 0.9; ctx.fill(); ctx.globalAlpha = 1.0;
+    ctx.restore();
+  }
+
+  function roundBox(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y); ctx.arcTo(x+w,y, x+w,y+r, r);
+    ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w,y+h, x+w-r,y+h, r);
+    ctx.lineTo(x+r, y+h); ctx.arcTo(x,y+h, x,y+h-r, r);
+    ctx.lineTo(x, y+r); ctx.arcTo(x,y, x+r,y, r);
+    ctx.closePath();
+  }
+
+  function draw(ad) {
+    ctx.clearRect(0, 0, 680, 420);
+    ctx.fillStyle = '#0f1117'; ctx.fillRect(0, 0, 680, 420);
+
+    var ox = 310, oy = 225, sc = 135;
+    var a = ad * Math.PI / 180;
+
+    // Anti-V reference (dashed, upward)
+    dash(ox, oy, ox, oy - sc - 20, C.ref, 1.5);
+    text('-V referans', ox + 8, oy - sc - 8, C.muted, 11);
+
+    // Rocket (nozzle at origin, rotated by -a)
+    rocket(ox, oy, -a);
+
+    // Origin dot
+    ctx.beginPath(); ctx.arc(ox, oy, 4, 0, Math.PI*2);
+    ctx.fillStyle = C.text; ctx.fill();
+
+    // V vector (downward, blue)
+    arrow(ox, oy+2, ox, oy+sc, C.v, 3);
+    text('V  (hiz, asagi)', ox+10, oy+sc-4, C.v, 13, '500');
+    text('gama = -90 deg', ox+10, oy+sc+14, C.muted, 11);
+
+    // T vector
+    var Tx = ox - sc * Math.sin(a);
+    var Ty = oy - sc * Math.cos(a);
+    arrow(ox, oy, Tx, Ty, C.t, 3);
+    var tlx = ad >= 0 ? Tx - 60 : Tx + 10;
+    text('T  (itki)', tlx, (oy + Ty)/2, C.t, 13, '500');
+
+    // Decomposition
+    if (Math.abs(ad) > 0.5) {
+      dash(ox, oy, ox, Ty, C.cosC, 2);
+      dash(ox, Ty, Tx, Ty, C.sinC, 2);
+      var rs = 9, sg = ad > 0 ? -1 : 1;
+      ctx.beginPath();
+      ctx.moveTo(ox + sg*rs, Ty); ctx.lineTo(ox + sg*rs, Ty+rs); ctx.lineTo(ox, Ty+rs);
+      ctx.strokeStyle = C.muted; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.stroke();
+      var cm = oy - (oy - Ty)/2;
+      text('T*cos(a)', ox+10, cm-6, C.cosC, 12, '500');
+      text('frenleme', ox+10, cm+8, C.cosC, 10);
+      var smx = (ox + Tx)/2;
+      text('T*sin(a)', smx - (ad>0 ? 36 : 0), Ty-14, C.sinC, 12, '500');
+      text(ad > 0 ? '(-s, sola)' : '(+s, saga)', smx - (ad>0 ? 28 : 0), Ty-2, C.sinC, 10);
+    }
+
+    // Alpha arc
+    if (Math.abs(ad) > 0.5) {
+      var arcR = 68;
+      var a0 = -Math.PI/2, a1 = -Math.PI/2 - a;
+      ctx.beginPath(); ctx.arc(ox, oy, arcR, Math.min(a0,a1), Math.max(a0,a1));
+      ctx.strokeStyle = C.arc; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.stroke();
+      var midA = -Math.PI/2 - a/2;
+      var lx = ox + (arcR+22)*Math.cos(midA);
+      var ly = oy + (arcR+22)*Math.sin(midA);
+      text('a = ' + ad + ' deg', lx + (ad>0 ? -56 : 4), ly+4, C.arc, 13, '500');
+    } else {
+      text('a = 0  ->  tam frenleme, saptirma yok', ox+8, oy-78, C.arc, 12, '500');
+    }
+
+    // Info box (right)
+    var bx=428, by=18, bw=238, bh=142;
+    ctx.fillStyle = C.box;
+    roundBox(bx, by, bw, bh, 8);
+    ctx.fill();
+
+    text('gama = -90 deg (dikey inis)', bx+12, by+22, C.muted, 11);
+    text('Roket govdesi = Thrust yonu', bx+12, by+38, C.muted, 11);
+
+    ctx.fillStyle = C.cosC; ctx.font = '500 12px sans-serif';
+    ctx.fillText('T*cos(a) = ' + (Math.cos(a)*100).toFixed(0) + '%   frenleme', bx+12, by+60);
+
+    ctx.fillStyle = C.sinC; ctx.font = '500 12px sans-serif';
+    ctx.fillText('T*sin(a) = ' + (Math.abs(Math.sin(a))*100).toFixed(1) + '%   saptirma', bx+12, by+80);
+
+    ctx.fillStyle = C.arc; ctx.font = '12px sans-serif';
+    var gdStr;
+    if (ad > 0)      { gdStr = 'g_dot < 0  (gamma azalir, -90e)'; }
+    else if (ad < 0) { gdStr = 'g_dot > 0  (gamma artar)'; }
+    else             { gdStr = 'g_dot = 0  (degismez)'; }
+    ctx.fillText(gdStr, bx+12, by+100);
+
+    ctx.fillStyle = C.muted; ctx.font = '11px sans-serif';
+    ctx.fillText('g_dot = -T*sin(a) / (mV)', bx+12, by+118);
+    ctx.fillText('Denklem 1 ile tutarli checkmark', bx+12, by+134);
+
+    // Bottom note
+    text('Nozul = kuvvet kaynagi. Govde = thrust yonu.', 14, 410, C.muted, 11);
+  }
+
+  slider.addEventListener('input', function() {
+    var v = parseInt(this.value, 10);
+    valSpan.textContent = v + ' deg';
+    draw(v);
+  });
+
+  draw(7);
+})();
+</script>
+
+</body>
+</html>
