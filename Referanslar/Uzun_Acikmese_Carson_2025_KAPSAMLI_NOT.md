@@ -1760,6 +1760,32 @@ Makale düz $t_f$ yazar; kod $w_\sigma \|s\|_1 / t_f$ kullanır (§6.6). Matemat
 
 Kod `r_cm = [0,0,-14]` sabit alır; atalet yalnızca kütleyle ölçeklenir. Bizim §4.2 kararımız (CG kayması + $\mathbf I(t)$ güncellemesi) **daha ayrıntılıdır**. Sorun değil — bizimki daha gerçekçi — ama kodu doğrudan çalıştırırken bu fark bilinerek yapılmalıdır.
 
+### 7.9 ⚠️ Model yapısal olarak roll momenti üretemiyor (makalede tartışılmıyor)
+
+Tek gimballi motor ve eksenel simetrik atalet varsayımının, makalenin hiç değinmediği bir sonucu var.
+
+**İtki momenti.** $r_{cm,B}=(0,0,-14)$ ve $T_B=(T_x,T_y,T_z)$ için:
+
+$$r_{cm,B} \times T_B = \begin{pmatrix} 0 \\ 0 \\ -14 \end{pmatrix} \times \begin{pmatrix} T_x \\ T_y \\ T_z \end{pmatrix} = \begin{pmatrix} 14\,T_y \\ -14\,T_x \\ \mathbf{0} \end{pmatrix}$$
+
+Üçüncü bileşen **sıfır** — gimballi tek motor, gövde ekseni etrafında (roll) moment üretemez.
+
+**Aerodinamik momenti.** $r_{cp,B}=(0,0,3)$ — aynı yapı, yine $z$ bileşeni sıfır.
+
+**Jiroskopik terim.** $J_B = m\cdot\mathrm{diag}(60,60,1.5)$ eksenel simetrik olduğu için:
+
+$$\big[\omega_B \times (J_B\omega_B)\big]_z = p\,(60m)\,q - q\,(60m)\,p = 0$$
+
+**Sonuç:**
+
+$$\dot\omega_z \equiv 0 \quad\text{her zaman}$$
+
+Roll hızı başlangıçta sıfırsa ($\omega_{Bi}=(0,0,0)$, Tablo 3) sonsuza kadar sıfır kalır. Bu modelde roll **hiç kontrol edilmiyor ve hiç değişmiyor** — çünkü onu değiştirecek hiçbir mekanizma yok.
+
+> ⚠️ Gerçek bir roket böyle davranmaz: rüzgâr, imalat asimetrisi veya kanatçık etkisi roll üretir. Roll kontrolü için ayrı aktüatör gerekir — **RCS itici, vernier motor, veya grid fin.**
+>
+> **Tez kararı (alındı):** İlk aşamada roll ihmal edilecek ve bu **açık bir varsayım olarak** tez metnine yazılacak. Modele roll aktüatörü eklemek ileri aşama işi.
+
 ---
 
 ## 8. Tez entegrasyonu
@@ -2243,11 +2269,427 @@ T_v = jnp.array([ u[0] * jnp.sin(u[1]) * jnp.cos(u[2]),     # T sin d cos p
 `CIB = CBI.transpose()` — dönme matrisleri **ortogonaldir**, tersi = devriği. Ters matris hesabına gerek yok: 9 sayının yerini değiştirmek yeterli. Sayısal olarak bedava ve hatasız.
 
 
+### 12.7 Dinamiğin beş satırı
+
+#### 12.7.1 Kütle: $\dot m = -\alpha_{\dot m}\,T$
+
+$$\alpha_{\dot m} := \frac{1}{I_{sp}\, g_0}$$
+
+**Fiziksel köken — roket denklemi.** Motor, yakıtı $v_e$ egzoz hızıyla atarak itki üretir:
+
+$$T = -\dot m\, v_e \quad\Longrightarrow\quad \dot m = -\frac{T}{v_e}$$
+
+$I_{sp}$ (specific impulse — özgül itki) motorun verimlilik ölçüsüdür, $v_e = I_{sp}\,g_0$ ile tanımlıdır. Buradaki $g_0 = 9.806$ m/s² **gerçek yerçekimi değil**, yalnızca birim dönüştürücüdür.
+
+**Sezgi:** $I_{sp}$ büyükse motor az yakıtla çok itki üretir. $I_{sp}=330$ s, tipik sıvı yakıtlı motor için makul.
+
+**Neden $\|T_B\|$ değil $T$:** §12.5'te türetildiği gibi $\|T_B\| = T$ — gimbal açıları büyüklüğü değiştirmiyor.
+
+```python
+f = f.at[0].set(- params['alpha_m'] * u[0])
+```
+
+#### 12.7.2 Konum: $\dot r_I = v_I$
+
+Tanım gereği doğru — fizik yok, muhasebe var.
+
+**Dikkat edilecek nokta:** Bu satır hem $r_I$ hem $v_I$'yı **aynı I çerçevesinde** tutuyor. Biri I'da diğeri B'de olsaydı önce çerçeve dönüşümü gerekirdi. Denklemi bu kadar sade tutan şey bu tasarım tercihi.
+
+```python
+f = f.at[1:4].set(x[4:7])
+```
+
+> **JAX sözdizimi notu:** JAX dizileri **değiştirilemez (immutable)** — `f[1:4] = ...` yazılamaz, çünkü otomatik türev (`jacfwd`) ve JIT derleme, fonksiyonların "temiz" (pure) olmasını gerektirir. `f.at[1:4].set(...)` bunun yerine **değiştirilmiş bir kopya** üretir; `f = ...` ile eski değişkenin üzerine yazılır.
+>
+> İndeksler: $f[i]$ her zaman $\dot x[i]$'yi temsil eder. `f.at[1:4]` = $\dot r_I$ (konumun türevi), `x[4:7]` = $v_I$ (hız). Sağ tarafta hiçbir hesap yok — sadece dilim kopyalanıyor, çünkü bu bir fizik yasası değil bir tanım.
+
+#### 12.7.3 Hız: kuvvetlerin toplamı
+
+$$\dot v_I = \frac{1}{m}\, C_{I\leftarrow B}\big(T_B + A_B\big) + g_I$$
+
+Newton II ($a = F/m$), üç kuvvet kaynağıyla.
+
+**(a) İtki terimi $C_{I\leftarrow B}T_B$.** $T_B$ gövdede tanımlı (motor gövdeye vidalı), ama Newton'un yasası atalet çerçevesinde geçerli.
+
+> **Somut örnek:** Roket 90° yatıksa ($q_i$'de olduğu gibi), gövdenin "ileri" yönü ($z_B$) dünyanın "yukarı" yönü değil **"yana"** yönüdür. Motor gövdeye göre tam düz ateşlese bile ($\delta^e=0$), bu itki dünyaya göre **yatay** bir kuvvettir. $C_{I\leftarrow B}$ olmadan roket yanlış yöne fırlar.
+
+**(b) Aerodinamik $A_B$.** Bkz. §12.8.
+
+**(c) Yerçekimi $g_I = (0,0,-g_0)$.** Bu terim **kütleye bölünmüyor** — $1/m$ çarpanının dışında. Çünkü yerçekimi ivmesi kütleden bağımsızdır (Galileo: tüy ve çekiç havasız ortamda aynı hızla düşer). $F=mg$ kuvvet, $a=g$ ivme — kütle sadeleşir. Ayrıca $g_I$ zaten I'da tanımlı, dönüşüme gerek yok.
+
+```python
+f = f.at[4:7].set( ((1 / x[0]) * (jnp.dot(CIB, (T_v + A_B)))) + g_I )
+```
+
+`(1/x[0])` yalnızca itki+aero toplamını çarpıyor, `g_I` dışarıda — fiziği birebir yansıtıyor.
+
+#### 12.7.4 Tutum: quaternion kinematiği
+
+$$\dot q_{B\leftarrow I} = \frac{1}{2}\,\Omega(\omega_B)\, q_{B\leftarrow I}$$
+
+Türetim ve tekillik tartışması §12.3'te. Operatörün açık formu:
+
+$$\Omega(\omega_B) = \begin{bmatrix} 0 & -p & -q & -r \\ p & 0 & r & -q \\ q & -r & 0 & p \\ r & q & -p & 0\end{bmatrix}, \qquad \omega_B = (p,q,r)$$
+
+Kodda dört ayrı satıra açılmış:
+
+```python
+ox = omega(x[11:14])
+f = f.at[7].set( 1/2 * (ox[0,0]*x[7] + ox[0,1]*x[8] + ox[0,2]*x[9] + ox[0,3]*x[10]))
+f = f.at[8].set( 1/2 * (ox[1,0]*x[7] + ox[1,1]*x[8] + ox[1,2]*x[9] + ox[1,3]*x[10]))
+f = f.at[9].set( 1/2 * (ox[2,0]*x[7] + ox[2,1]*x[8] + ox[2,2]*x[9] + ox[2,3]*x[10]))
+f = f.at[10].set(1/2 * (ox[3,0]*x[7] + ox[3,1]*x[8] + ox[3,2]*x[9] + ox[3,3]*x[10]))
+```
+
+Bu tam olarak $\Omega(\omega_B)\,q$ matris-vektör çarpımı — sadece elle açılmış. `ox @ x[7:11]` de yazılabilirdi; elle açmak JAX'in küçük sabit-boyutlu matrisler için derleme grafiğinde küçük bir verimlilik farkı yaratabiliyor.
+
+#### 12.7.5 Açısal hız: Euler'in dönme denklemi
+
+$$\dot\omega_B = J_B^{-1}\Big(\underbrace{[r_{cm,B}\times]\,T_B}_{\text{itki momenti}} + \underbrace{[r_{cp,B}\times]\,A_B}_{\text{aero momenti}} - \underbrace{\omega_B \times (J_B\,\omega_B)}_{\text{jiroskopik terim}}\Big)$$
+
+**(a) İtki momenti.**
+
+> ⚠️ **Yön tanımı — dikkat.** Makalenin kendi ifadesi: *"the vector from the vehicle's center of mass **to** the engine gimbal hinge point"*. Yani $r_{cm,B}$: **kütle merkezinden gimbal menteşesine.** Alt indeks "cm", vektörün *nereden başladığını* gösteriyor. Aynı kural $r_{cp,B}$ için: kütle merkezinden basınç merkezine.
+>
+> **Neden bu yön zorunlu:** Tork $M = r\times F$ formülünde $r$, torkun hesaplandığı noktadan (kütle merkezi — Euler denklemi CM etrafındaki dönmeyi yazıyor) kuvvetin uygulandığı noktaya (gimbal) doğru olmalıdır. Tersi alınırsa tork işareti ters çıkar.
+
+$r_{cm,B} = (0,0,-14)$ m. Motor roketin kuyruğunda, kütle merkezinin altında; CM'den başlayıp motora gitmek $z_B$'de negatif yönde 14 m.
+
+**Moment nasıl doğuyor:** Gimbal açısı sıfırsa ($\delta^e=0$) itki tam gövde eksenine paralel — moment kolu ile kuvvet aynı doğrultuda, çapraz çarpım sıfır, **moment yok**. Gimbal açılırsa itki eksenden kayar, moment doğar.
+
+> **Roketin nasıl döndürüldüğünün tam mekanizması budur:** pervane veya kanatçık değil, doğrudan itkinin yönünü kaydırmak.
+
+**(b) Aerodinamik momenti.** Aynı mantık, farklı moment kolu: $r_{cp,B}=(0,0,3)$ m — **basınç merkezi**, hava direncinin etkin uygulama noktası.
+
+> **Neden CP ≠ CM:** Kütle merkezi kütlenin nerede yoğunlaştığını, basınç merkezi hava basıncının net etkisinin nerede toplandığını gösterir — biri kütle dağılımına, diğeri geometriye bağlıdır. Aradaki fark roketin **aerodinamik stabilitesini** belirler (CP, CM'in gerisindeyse ok gibi kendini doğrultur — weathervaning).
+
+**(c) Jiroskopik terim — dış kuvvet yok, yine de moment var.**
+
+Bu terim hiçbir dış kuvvetten gelmiyor; yalnızca roketin **kendi dönüşünden** kaynaklanıyor.
+
+**Matematiksel köken.** Euler denklemi açısal momentum korunumundan ($\dot L|_I = M$) türetilir. Ama $\omega_B$ **B çerçevesinde** takip ediliyor — dönen bir çerçevede. Dönen çerçevede türev alırken ekstra terim çıkar (Coriolis ile aynı aile):
+
+$$\frac{dL}{dt}\bigg|_I = \frac{dL}{dt}\bigg|_B + \omega_B \times L$$
+
+$L = J_B\omega_B$ konup $J_B\dot\omega_B$'ye çözülünce jiroskopik terim ortaya çıkar.
+
+**Bisiklet tekerleği analojisi:** Dönen bir tekerleği elinizde tutup eksenini çevirmeye çalışın — beklemediğiniz bir yönde direnç hissedersiniz (jiroskopik presesyon). Yeni bir kuvvet uygulamadınız; tekerlek kendi dönüşü yüzünden böyle davranıyor.
+
+**Roket için somut:** Roket $x$ ekseni etrafında hızlı dönüyorsa ($\omega_B=(p,0,0)$, $p$ büyük) ve gimbal ile $y$ ekseninde moment uygulanırsa, jiroskopik terim bu momentin bir kısmını **$z$ eksenine sızdırır** — roket komut verilen eksende değil, ona dik bir eksende de tepki verir. Uçuş kontrolcüsü tasarımında ihmal edilirse kararsızlığa yol açabilecek bir çapraz-eksen etkileşimi.
+
+**Neden nonkonveks:** $\omega_B \times (J_B\omega_B)$ ifadesi $\omega_B$'de **kuadratik** ($\omega$ çarpı $\omega$). Bkz. §12.10.
+
+```python
+f = f.at[11:14].set(
+    jnp.dot(J_B_inv_m,
+        jnp.dot(skew(r_cm), T_v[0:3])
+      + jnp.dot(skew(r_cp), A_B)
+      - jnp.dot(skew(x[11:14]), (J_B_m @ x[11:14]))
+    )
+)
+```
+
+> Bu modelin roll momenti üretememesi hakkında: **§7.9**.
+
+#### 12.7.6 Beş satırın özeti
+
+| # | Denklem | Fiziksel köken | Konveks mi |
+|---|---|---|---|
+| 1 | $\dot m = -\alpha_{\dot m}T$ | Roket denklemi | Lineer ✓ |
+| 2 | $\dot r_I = v_I$ | Tanım | Lineer ✓ |
+| 3 | $\dot v_I = \tfrac{1}{m}C_{I\leftarrow B}(T_B+A_B)+g_I$ | Newton II | **Nonkonveks** |
+| 4 | $\dot q = \tfrac12\Omega(\omega_B)q$ | Kinematik | **Nonkonveks** |
+| 5 | $\dot\omega_B = J_B^{-1}(\ldots-\omega\times J_B\omega)$ | Euler dönme denklemi | **Nonkonveks** |
+
+### 12.8 Aerodinamik kuvvet
+
+$$A_B(t) = -\frac{1}{2}\,\rho\,\|v_I(t)\|_2\,S_A\,C_A\,C_{B\leftarrow I}(t)\,v_I(t)$$
+
+#### 12.8.1 Klasik formülden geliş
+
+Havacılıkta standart sürükleme denklemi $F_{drag} = \tfrac12\rho v^2 S C_D$. Makalenin formülü bunun **vektörel ve genelleştirilmiş** hali.
+
+#### 12.8.2 Neden $\|v_I\|\cdot v_I$ (hız-kare **ve** yön)
+
+Hız formülde iki kere geçiyor: $\|v_I\|$ (skaler büyüklük) ve $C_{B\leftarrow I}v_I$ (vektör yön). Çarpımları etkin olarak $v^2$ verir ama **yönü korur.**
+
+**Neden düz $v^2$ değil:** Sürükleme her zaman hıza **zıt** olmalı. Bileşenler ayrı ayrı karelenseydi ($v_x^2$ vb.) negatif bileşenler pozitife dönerdi ve yön bilgisi kaybolurdu. $\|v\|\cdot v$ yapısı büyüklüğü kare gibi büyütürken **işareti $v$'den miras alır**; baştaki eksiyle birlikte sürükleme hep doğru yönde çıkar.
+
+```python
+v_norm = (x[4]**2 + x[5]**2 + x[6]**2 + 1e-8)**(0.5)
+A_B = - 0.5 * params['rho_air'] * v_norm * params['S_area'] * (params['C_aero'] @ (CBI @ x[4:7]))
+```
+
+> **Neden $+10^{-8}$:** $\|v\|=\sqrt{v_x^2+v_y^2+v_z^2}$ fonksiyonunun türevi $v=0$'da tanımsızdır. Bu küçük sabit, karekök içini asla tam sıfır yapmayarak Jacobian'ın ($\partial A_B/\partial v$) patlamasını önler — otomatik türev için güvenlik payı. Roket durağan hızdan geçerse bu olmadan `jacfwd` NaN üretebilirdi.
+
+#### 12.8.3 Neden hız önce gövde çerçevesine çevriliyor
+
+Formülde $C_{B\leftarrow I}v_I$ var: hız I'dan B'ye çevriliyor, kuvvet B'de hesaplanıyor, sonra hız denkleminde tekrar $C_{I\leftarrow B}$ ile I'ya çevriliyor.
+
+**Neden bu gidiş-dönüş:** $C_A$ matrisi **gövdeye göre** tanımlı — rüzgâr tünelinde ölçümler modele göre yapılır, dünyaya göre değil. Hesap B'de yapılmalı; ama Newton'un yasasına sokmadan önce I'ya dönmek gerekir.
+
+#### 12.8.4 $C_A$ matrisi neden köşegen
+
+$$C_A = \mathrm{diag}(0.4068,\; 0.4068,\; 0.0522)$$
+
+Roket gövde eksenlerinde simetrik bir silindir. $x_B, y_B$ katsayıları **eşit** (0.4068) — hangi yandan rüzgâr gelirse gelsin yanal direnç aynı. $z_B$ (boylamasına) çok daha küçük (0.0522) — ince uzun bir cisim boyuna doğrultuda çok az direnç görür; bir kalemi düz tutup sallamak, yan tutup sallamaktan kolaydır.
+
+**Köşegen olması** çapraz terimlerin sıfır olduğunu söyler: $x_B$ yönündeki hız, $y_B$ veya $z_B$'de kuvvet üretmiyor. Bu bir basitleştirme (gerçekte kanatçık asimetrisi gibi küçük çapraz etkiler olabilir) ama silindirik gövde için makul.
+
+### 12.9 Operatörler: `skew` ve `omega`
+
+#### 12.9.1 `skew` — çapraz çarpımı matrise çevirmek
+
+```python
+def skew(v):
+    return jnp.array([
+        [0,    -v[2],  v[1]],
+        [v[2],     0, -v[0]],
+        [-v[1], v[0],     0]
+    ])
+```
+
+**Neden gerekli:** $r\times T$'yi JAX'in otomatik türev sistemine "matris çarpımı" olarak sunmak, özel bir operasyon olarak sunmaktan daha standart. `skew(r) @ T` cebirsel olarak $r\times T$ ile **birebir aynı** — yaklaşıklık değil, kesin eşitlik.
+
+**Doğrulama:**
+
+$$r \times T = \begin{pmatrix} r_2T_3 - r_3T_2 \\ r_3T_1 - r_1T_3 \\ r_1T_2 - r_2T_1\end{pmatrix}, \qquad
+\begin{bmatrix}0 & -r_3 & r_2 \\ r_3 & 0 & -r_1 \\ -r_2 & r_1 & 0\end{bmatrix}\begin{pmatrix}T_1\\T_2\\T_3\end{pmatrix} = \begin{pmatrix}-r_3T_2+r_2T_3 \\ r_3T_1-r_1T_3 \\ -r_2T_1+r_1T_2\end{pmatrix}$$
+
+Aynı sonuç ✓
+
+**Çarpık simetrik:** Devriğini alın — köşegenin üstü ve altı işaret değiştirir, $M^\top = -M$. Bu, §12.3.5'te $\Omega$ için kullandığımız **aynı yapı**; çapraz çarpımın kendisiyle her zaman dik olması ($r\times T \perp r$) buradan gelir.
+
+> ⭐ **Kalıp:** $\Omega(\omega_B)$ (quaternion kinematiği) ve `skew(r)` (moment hesabı) matematiksel olarak **aynı aile** — ikisi de çarpık simetrik, ikisi de bir çapraz-çarpım-benzeri işlemi matrise gömüyor. Rotasyon geometrisinde tekrar tekrar karşınıza çıkan bir yapı.
+
+#### 12.9.2 `omega` — makaleyle birebir eşleşiyor
+
+```python
+def omega(w):
+    return jnp.array([
+        [0,    -w[0], -w[1], -w[2]],
+        [w[0],     0,  w[2], -w[1]],
+        [w[1], -w[2],     0,  w[0]],
+        [w[2],  w[1], -w[0],     0],
+    ])
+```
+
+Makalenin $\Omega(\xi)$ tanımıyla birebir aynı (`w[0]`→$\xi_1$ vb.). İşaret farkı **yok**; §12.3.5'teki türetim buradan doğrudan doğrulanıyor.
+
+### 12.10 Nonkonvekslik haritası
+
+SCP'nin her iterasyonda **tam olarak neyi** lineerleştirdiğinin haritası:
+
+| Terim | Nerede | Nonlineerlik türü |
+|---|---|---|
+| $C_{B\leftarrow I}(q),\; C_{I\leftarrow B}(q)$ | Hız denklemi, aero | Quaternion'da **kuadratik** ($q_iq_j$ çarpımları) |
+| $\tfrac{1}{m}\cdot(\ldots)$ | Hız denklemi | **Bilineer** — $m$, $q$ ve $u$ birbiriyle çarpılıyor |
+| $\|v_I\|\cdot v_I$ | Aerodinamik | Norm × kendisi |
+| $\Omega(\omega_B)\,q$ | Tutum kinematiği | **Bilineer** ($\omega$ ile $q$ çarpımı) |
+| $\omega_B \times (J_B\omega_B)$ | Açısal hız | $\omega$'da **kuadratik** |
+
+#### 12.10.1 $C(q)$ neden kuadratik — ve "$SO(3)$ doğrusal değil" ne demek
+
+Matrisin her elemanı quaternion bileşenlerinin ya karesi ($q_3^2$) ya çarpımı ($q_2q_3$) — hiçbiri birinci dereceden değil.
+
+**Derin sebep:** $SO(3)$ (rotasyon matrisleri kümesi) matris çarpımı altında kapalıdır ama **toplama altında kapalı değildir** — iki rotasyon matrisini eleman-eleman toplarsanız sonuç genelde rotasyon matrisi olmaz (satırlar birim uzunlukta ve dik kalmaz).
+
+**Saat analojisi:** "Saat 3 + saat 5" anlamlı bir toplama değildir. Saat pozisyonları dairesel bir yapıda yaşar, düz bir vektör uzayında değil. $SO(3)$ de böyle **eğri bir yüzeyde (manifold)** yaşar. Quaternion bileşenlerindeki kuadratik terimler tam olarak bu eğriliği kodlar; lineer bir formülle yakalanamaz.
+
+#### 12.10.2 $1/m$ — sık yapılan bir hatayı düzeltelim
+
+> ⚠️ **"$1/m$ konveks değildir" demek yanlıştır.** $f(m)=1/m$ için $f''(m) = 2/m^3 > 0$ ($m>0$) — fonksiyon **konvekstir**.
+
+**Asıl sorun $1/m$'nin kendisi değil, çarpım yapısıdır:**
+
+$$\dot v_I = \underbrace{\frac{1}{m}}_{\text{durum}} \cdot \underbrace{C_{I\leftarrow B}(q)}_{\text{durum}} \cdot \underbrace{(T_B(u) + A_B(x))}_{\text{durum + kontrol}}$$
+
+Üç ayrı değişken grubu birbiriyle çarpılıyor — **bilineer** (çok-lineer) terim.
+
+**Hessian testi.** $g(m,T) = T/m$ için:
+
+$$H = \begin{bmatrix} 2T/m^3 & -1/m^2 \\ -1/m^2 & 0 \end{bmatrix}, \qquad \det H = -\frac{1}{m^4} < 0$$
+
+Negatif determinant → Hessian pozitif tanımlı değil → **eyer noktası (saddle)** yapısı. §5.2'deki "eyer şeklindeki kuadratik kısıt konveks değildir" örneğiyle aynı sınıf.
+
+**Dikdörtgen analojisi:** Alan $= u \times g$. Uzunluk ve genişlik ayrı ayrı gayet uysal, ama **çarpımları** $u$-$g$ düzleminde eyer şeklinde bir yüzey çizer. Sabit alanlı dikdörtgenlerin kümesi ($u\cdot g = 10$) bir **hiperbol** — konveks değil.
+
+**Doğru genel ifade:**
+
+> Dinamik $\dot x = F(x,u)$ bir **eşitlik kısıtıdır.** Bir eşitlik kısıtının tanımladığı küme, **ancak ve ancak $F$ afin (lineer + sabit) ise** konvekstir. $F$ içinde herhangi bir çarpım, kare veya bölme varsa, o eşitlik kısıtı genel olarak nonkonveks bir küme tanımlar. Mesele $F$'nin kendi konvekslik sınıfı değil, **doğrusal olup olmadığıdır.**
+
+#### 12.10.3 Konveks kalanlar
+
+| Terim | Neden konveks |
+|---|---|
+| $\dot m = -\alpha T$ | Lineer |
+| $\dot r_I = v_I$ | Lineer |
+| $g_I$ | Sabit |
+| Tüm yol kısıtları (tilt, açısal hız, glideslope, gimbal) | Afin / konveks kuadratik / konik (§5.2) |
+
+> **Sonuç:** Dinamiğin beş satırından **üçü** nonkonveks. SCP'nin işi tam olarak bunları her iterasyonda Jacobian alıp lineerleştirmek. Kısıtlar bu listede **hiç yok** — onlara dokunulmuyor (§4.1.1).
+
+### 12.11 Kodla tam eşleşme — Bölüm II.A'nın tamamı
+
+```python
+def dynamics(x, u):
+    CBI = CBI_fcn(x[7:11])              # C_{B<-I}(q)
+    CIB = CBI.transpose()               # C_{I<-B} = C_{B<-I}^T
+
+    J_B_inv_m = J_B_inv_pre / x[0]      # J_B^{-1}, kutleyle olcekli
+    J_B_m     = J_B_pre * x[0]          # J_B, kutleyle olcekli
+
+    # 1. Kutle
+    f = f.at[0].set(- params['alpha_m'] * u[0])
+
+    # 2. Konum
+    f = f.at[1:4].set(x[4:7])
+
+    # Aerodinamik (3 ve 5'te kullanilacak)
+    v_norm = (x[4]**2 + x[5]**2 + x[6]**2 + 1e-8)**0.5
+    A_B = -0.5 * params['rho_air'] * v_norm * params['S_area'] * (params['C_aero'] @ (CBI @ x[4:7]))
+
+    # Itki vektoru (bkz. 12.4.1)
+    T_v = jnp.array([u[0]*jnp.sin(u[1])*jnp.cos(u[2]),
+                      u[0]*jnp.sin(u[1])*jnp.sin(u[2]),
+                      u[0]*jnp.cos(u[1])])
+
+    # 3. Hiz
+    f = f.at[4:7].set(((1/x[0]) * jnp.dot(CIB, (T_v + A_B))) + g_I)
+
+    # 4. Tutum (Omega @ q, 4 satira acilmis)
+    ox = omega(x[11:14])
+    f = f.at[7].set(0.5*(ox[0,0]*x[7]+ox[0,1]*x[8]+ox[0,2]*x[9]+ox[0,3]*x[10]))
+    f = f.at[8].set(0.5*(ox[1,0]*x[7]+ox[1,1]*x[8]+ox[1,2]*x[9]+ox[1,3]*x[10]))
+    f = f.at[9].set(0.5*(ox[2,0]*x[7]+ox[2,1]*x[8]+ox[2,2]*x[9]+ox[2,3]*x[10]))
+    f = f.at[10].set(0.5*(ox[3,0]*x[7]+ox[3,1]*x[8]+ox[3,2]*x[9]+ox[3,3]*x[10]))
+
+    # 5. Acisal hiz (itki momenti + aero momenti - jiroskopik)
+    f = f.at[11:14].set(jnp.dot(J_B_inv_m,
+          jnp.dot(skew(r_cm), T_v[0:3])
+        + jnp.dot(skew(r_cp), A_B)
+        - jnp.dot(skew(x[11:14]), (J_B_m @ x[11:14]))
+    ))
+```
+
+### 12.12 Adım 3 — Tez entegrasyon analizi
+
+#### 12.12.1 Durum/kontrol eşlemesi
+
+Makalenin 14 boyutlu durum vektörü, PROJE_BAGLAMI §1'deki 6-DOF hedefiyle **yapısal olarak birebir örtüşüyor** — Wang & Song'un 3-DOF modelinde bu yoktu.
+
+| Makale | Simulink modeli (beklenen) | Uyum |
+|---|---|---|
+| $m$ | Kütle durumu | ✓ |
+| $r_I, v_I$ | Konum/hız blokları | ✓ |
+| $q_{B\leftarrow I}$ | Quaternion (§4.2'de zaten seçilmiş) | ✓ |
+| $\omega_B$ | Açısal hız | ✓ |
+| $u=(T,\delta^e,\phi^e,\delta^b,\phi^b)$ | Thrust Vectoring subsystem çıkışı | **kısmi** — §12.12.2 |
+
+- [ ] **Açık:** Simulink modelindeki durum vektörü sırası makalenin sırasıyla aynı mı? Model paylaşıldığında doğrulanacak.
+
+#### 12.12.2 Gimbal parametrizasyonu uyuşmazlığı
+
+PROJE_BAGLAMI §4.4: *"Thrust Vectoring subsystem: çift kademeli saturasyon — `Zeta_CMD` önce `max_noz_ang_rad`'ın ±%75'ine sınırlanır..."*
+
+`Zeta_CMD` ismi **kartezyen** bir gimbal komutuna işaret ediyor ($\zeta_x, \zeta_y$), makale ise **küresel** parametrizasyon kullanıyor ($\delta^e, \phi^e$). Matematiksel olarak eşdeğer ama aynı değil:
+
+$$\zeta_x = T\sin\delta^e\cos\phi^e, \qquad \zeta_y = T\sin\delta^e\sin\phi^e$$
+
+| | Kartezyen | Küresel |
+|---|---|---|
+| Kısıt şekli | Kare/kutu | **Disk (dairesel)** |
+| Fiziksel gerçekçilik | — | Nozzle genelde dairesel hareket eder |
+
+> ⭐ **Açık karar noktası:** SCP küresel parametrizasyon kullanırsa, çıkan yörünge Simulink'in izin verdiğinden **farklı bir gimbal kısıt şekli** varsayıyor olabilir. Trajectory'yi Simulink'e beslerken gözden geçirilmeli.
+
+#### 12.12.3 Atalet modeli genişletmesi
+
+$$\text{Makale:}\quad J_B(t) = m(t)\cdot\mathrm{diag}([60,60,1.5]), \quad r_{cm,B} = \text{sabit}$$
+
+$$\text{Sizin §4.2 kararınız:}\quad J_B(t) = J_B\big(m(t), r_{cm,B}(t)\big), \quad r_{cm,B}(t) = f(\text{yakıt tüketimi})$$
+
+Dinamik fonksiyonda **yalnızca iki yeri** etkiler:
+
+```python
+J_B_m = J_B_pre * x[0]                  # -> J_B_fonksiyonu(x[0], r_cm(x[0]))
+jnp.dot(skew(r_cm), T_v[0:3])           # -> r_cm artik x[0]'in fonksiyonu
+```
+
+> **Pratik kolaylık:** JAX otomatik türev kullandığı için (§6.3), $r_{cm}(m)$'yi $m$'nin fonksiyonu olarak yazmanız yeterli — Jacobian zinciri otomatik güncellenir. PROJE_BAGLAMI §6'daki "6-DOF'ta elle Jacobian riskli" endişesini doğrudan çözüyor.
+
+#### 12.12.4 Hiyerarşik mimari — **A seçeneği (karar alındı)**
+
+| Seçenek | Üst katman | Alt katman | Karar |
+|---|---|---|---|
+| **A** | Bu 6-DOF model, kaba ayrıklaştırma ($K$ küçük) | Aynı model, ince ayrıklaştırma + kayan ufuk ([62]) | ✅ **Seçildi** |
+| B | Basitleştirilmiş 3-DOF planlayıcı | 6-DOF takipçi | Elendi (iki modelin tutarlılığını doğrulama yükü) |
+
+> A'nın bedeli daha ağır hesaplama yüküdür; avantajı tek model, tek tutarlılık. **[62] incelendikten sonra tekrar değerlendirilecek.**
+
+#### 12.12.5 Çoklu iniş noktası — bozucu sonrası site değişimi
+
+**Hedef (kullanıcı kararı):** Roket tek bir noktayı körü körüne takip etmemeli; bozucu sonrası daha iyi bir site varsa oraya geçebilmeli. **Olmazsa olmaz değil — önce düz dikey iniş çalışsın.**
+
+**Problemin doğası.** "Site 1 mi site 2 mi" **ayrık** bir karardır — arada bir şey yok. Bu, fizibil kümeyi **kopuk** hale getirir: iki ayrı vadi, arada köprü yok. SCP bir vadiye düşer ve çıkmaz; başlangıç tahmini site 1'i gösteriyorsa site 2'yi **asla keşfetmez** (§4.1.2, dağ analojisi; §3.4.2.0, yasak boşluk).
+
+| Yaklaşım | Nasıl | Değerlendirme |
+|---|---|---|
+| **A. Her ikisini çöz, iyisini seç** | SCP'yi iki farklı başlangıç tahminiyle çalıştır, maliyetleri karşılaştır | ✅ **Pratik ve doğru.** 2 site = 2× hesap; iterasyon ~0.1 s olduğuna göre kabul edilebilir |
+| B. Mixed-integer | İkili değişken + MIP | ❌ $2^K$ patlaması (§3.4.2.0) |
+| C. Homotopy | Sürekli deformasyonla ayrık mantık — [41] Malyuta & Açıkmeşe | Zarif ama tez kapsamı için ağır |
+
+> ⚠️ **D-GMSR bunu tek başına çözmez.** "Site 1 VEYA site 2" mantığını pürüzsüz, sound ve complete şekilde kodlayabilir — ama **pürüzsüzleştirme çok-tepeliliği (multi-modality) ortadan kaldırmaz.** D-GMSR locality & masking'i çözer (§4.11), kopuk fizibil kümede global optimumu bulmayı değil.
+
+**Uçuş ortasında geçiş — MPC'ye özgü sorun.** Warm start (§6.12) sizi kilitler: her adımda bir önceki çözüm başlangıç tahmini olduğu için **hep aynı vadide kalırsınız.** MPC kendiliğinden asla site değiştirmez.
+
+**Gereken mimari:**
+
+```
+DENETLEYICI KATMAN (cok yavas, ~1 s)
+  Her N adimda: HER IKI siteyi de coz, maliyetleri karsilastir
+  Karar: site degissin mi?
+              |
+UST KATMAN (yavas, ~1-2 s)
+  Secilen siteye 6-DOF yorunge planla (bu makale)
+              |
+ALT KATMAN (hizli, ~0.1 s)
+  Yorungeyi takip et (MPC, [62])
+```
+
+**İki kritik kontrol sorunu:**
+
+| Sorun | Ne olur | Çözüm |
+|---|---|---|
+| **Chattering** | Maliyetler yakınsa (%1 fark) ölçüm gürültüsü her adımda kararı ters çevirir; roket iki site arasında salınır | **Histerezis:** sadece belirli marjla (ör. %5) daha iyiyse geç; geçişten sonra **minimum bekleme süresi** (ör. 3 s) |
+| **Point of no return** | Belirli irtifanın altında geçiş fiziksel olarak imkânsız; fizibil olmayan probleme çözüm aranır | **Commit altitude:** eşiği elle seçmek yerine **fizibilite testiyle** bul — her iki siteye çözüm fizibil olduğu sürece karar açık, biri fizibil olmaktan çıkınca kilitle |
+
+**Literatür bağlantısı.** §3.6'daki **G-FOLD**'un açılımına dikkat: **G**uidance for **F**uel **O**ptimal **L**arge **D**ivert. "Divert" = sapma, rota değiştirme. Xombie uçuş testleri ([25],[26]) 500 m ve 750 m'lik **sapma manevralarıdır.** Mars 2020'nin Terrain Relative Navigation sistemi de tehlikeli bölge tespitinde daha güvenli noktaya sapma yeteneğine sahipti.
+
+> ⭐ **Tez katkısı:** "Sürekli-zaman kısıt garantili 6-DOF MPC + çoklu iniş noktası arasında bozucu-tetiklemeli geçiş" birleşimi literatürde hazır bir paket olarak yok. G-FOLD 3-DOF ve açık-döngü; bu makale 6-DOF ama tek site ve MPC değil.
+
+#### 12.12.6 Quaternion kararının teorik doğrulanması
+
+§12.3.5'teki $\frac{d}{dt}\|q\|^2 = 0$ türetimi, PROJE_BAGLAMI §4.2'deki normalizasyon kararını destekliyor.
+
+> **Tez metninde kullanılabilecek cümle:** *"Quaternion kinematiği analitik olarak norm-koruyucudur; normalizasyon adımı yalnızca sayısal kararlılık içindir ve ek bir fiziksel varsayım getirmez."*
+
+#### 12.12.7 Eylem maddeleri
+
+- [ ] Simulink durum vektörü sırasını makaleyle karşılaştır (§12.12.1)
+- [ ] Gimbal parametrizasyonu: kartezyen mi küresel mi (§12.12.2)
+- [ ] $r_{cm}(m)$ fonksiyonunu tanımlayıp koda ekle — iki satır (§12.12.3)
+- [ ] [62] okunduktan sonra mimari A kararını tekrar değerlendir (§12.12.4)
+- [ ] Çoklu site: "her ikisini çöz + histerezis + commit altitude" — düz iniş çalıştıktan **sonra** (§12.12.5)
+- [x] Roll ihmal kararı — açık varsayım olarak tez metnine yazılacak (§7.9)
+- [x] Tek nozzle kararı — makalenin yapısı alınacak
+
 ## Değişiklik geçmişi
 
 | Tarih | Ne eklendi |
 |---|---|
+| — | **Bölüm II.A — Adım 1 (2/3, 3/3), Adım 3, Adım 4.** Dinamiğin beş satırı, aerodinamik, operatörler, nonkonvekslik haritası, tez entegrasyon analizi (mimari A, çoklu site, roll bulgusu §7.9). |
 | — | **Bölüm II.A — Adım 1, Bölüm 1/3.** Referans çerçeveleri, durum/kontrol vektörleri, Euler tekilliği (türetimle), gimbal parametrizasyonu. 2 inline SVG. |
 | — | **Bölüm I (Introduction) — Adım 1 tamamlandı.** Ek olarak: kod deposu analizi (§6), errata (§7), tez entegrasyon planı (§8), terimler sözlüğü (§10), referans haritası (§11). 3 inline SVG. |
 
-> **Sonraki:** Bölüm II.A, Adım 1 — Bölüm 2/3 (dinamiğin beş satırı) ve 3/3 (aerodinamik, operatörler, nonkonvekslik haritası).
+> **Sonraki:** Bölüm II.B — General state and control constraints. Ardından II.C (sınır koşulları) ve II.D (compound STC'ler).
