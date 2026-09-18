@@ -8,8 +8,8 @@ tags:
   - 6-DOF
   - bitirme-tezi
 kaynak: "Uzun, S., Açıkmeşe, B., and Carson III, J. M., “Sequential Convex Programming for 6-DoF Powered Descent Guidance with Continuous-Time Compound State-Triggered Constraints,” AIAA SCITECH 2025 Forum, 2025, p. 1895. https://doi.org/10.2514/6.2025-1895"
-bolum: "I. Introduction (tam); II.A (tam); II.B (tam); II.C (tam)"
-durum: Bolum-II.C-tamamlandi
+bolum: "I. Introduction (tam); II.A (tam); II.B (tam); II.C (tam); II.D (tam)"
+durum: Bolum-II.D-tamamlandi — sirada III.A (D-GMSR)
 ilgili:
   - "[[Wang_Song_2018_KAPSAMLI_NOT]]"
   - "[[Angara_1.2_6DOF_Simulink_Modeli]]"
@@ -1909,7 +1909,8 @@ J = min t_f  veya  min yakıt       J = ? ← HÂLÂ AÇIK
 - [x] Bölüm II.A — Rocket Dynamics
 - [x] Bölüm II.B — kısıtlar
 - [x] Bölüm II.C — sınır koşulları
-- [ ] **Bölüm II.D — compound STC'ler** (sıradaki — makalenin asıl özgün katkısı, boresight line-of-sight kısıtının tam detayı)
+- [x] Bölüm II.D — compound STC'ler (De Morgan, masking-gereklilik kanıtı, zaman çizelgesi)
+- [ ] **Bölüm III.A — D-GMSR parametrizasyonu** (sıradaki)
 - [ ] Bölüm III.A — D-GMSR parametrizasyonu
 - [ ] Bölüm III.B — CT-SCvx (5 alt bölüm)
 - [ ] Bölüm IV — sayısal sonuçlar
@@ -2818,10 +2819,111 @@ vehicle_cons += [
 `1:-1` dilimlemesi tam olarak **kütle** ($x_0$) ve **CTCS sayacı $y$** ($x_{14}$) dışındaki her şeyi sabitliyor — makalenin $m(t_f)$'i muaf tutmasıyla birebir örtüşüyor. $y$'nin de hariç tutulması tutarlı: $y$'nin kendi sınır koşulu ayrıca ele alınıyor ($y(t_f)-y(0)\le\epsilon_{LICQ}$, §5.4.6).
 
 
+---
+
+## 15. Bölüm II.D — Compound State-Triggered Constraints
+
+> **Durum:** Adım 1 (1/2+2/2), 3, 4 tamamlandı. Makalenin asıl özgün katkısı — dört bileşik STC.
+
+### 15.1 Genel STC kalıbı
+
+$$\underbrace{g_{trig}(x)<0}_{\text{tetikleyici sağlandı mı?}} \;\Longrightarrow\; \underbrace{g_{stc}(x,u)\le0}_{\text{o zaman bu kısıt geçerli}}$$
+
+§13'teki (II.B) kısıtların aksine, STC'ler **koşullu** — sadece bir tetikleyici sağlandığında devreye girer. Trafik analojisi: "şehirde 50 km/s" koşulsuz (II.B tipi); "okul bölgesinde, ders saatinde 30 km/s" koşullu (STC tipi).
+
+### 15.2 Eq.(1a) — İrtifa tetiklemeli 5'li demet
+
+$$\big(e_3^\top r_I(t)<h^{trig}_1\big)\Longrightarrow\bigwedge_{i=1}^5\big(g^{stc_i}(x)\le0\big)$$
+
+$h^{trig}_1=100$ m altında **beş kısıt birden**: gimbal sapma, hız, açısal hız, tilt, glideslope — hepsi aynı anda sıkılaşıyor (son yaklaşma koridoru).
+
+| Büyüklük | Genel kısıt (II.B) | STC (Eq.1a, $h<100$m) | Sıkılaşma |
+|---|---|---|---|
+| Hız | sınırsız | $v^{stc}_I=20$ m/s | yeni |
+| Açısal hız | $\omega_{max}=90°/s$ | $\omega^{stc}=2.5°/s$ | 36× |
+| Tilt | $\theta_{max}=90°$ | $\theta^{stc}=5°$ | 18× |
+| Glideslope | $\gamma_{max}=35°$ | $\gamma^{stc}=5°$ | 7× |
+| Gimbal sapma | $\delta^e_{max}=10°$ | $\delta^{stc}=1°$ | 10× |
+
+> ⚠️ **Errata:** Tablo 3'te $\delta^{stc}$ **"1 deg s⁻¹"** yazılı — ama $\delta$ bir açı, açısal hız değil; $\delta^e_{max}=10°$ ile aynı birimde ("deg") olmalı. Muhtemelen $\omega^{stc}=2.5°/s$'nin biriminden bulaşmış kopyalama hatası.
+
+### 15.3 Eq.(1b) — İrtifa tetiklemeli line-of-sight
+
+$$\big(e_3^\top r_I(t)<h^{trig}_2\big)\Longrightarrow \cos\psi^{stc}\|r_I(t)-r_f\|_2\le\big(r_I(t)-r_f\big)^\top C_{I\leftarrow B}(t)\,\ell_B(t)$$
+
+**İki ayrı irtifa eşiği neden var** ($h^{trig}_2=200$m $\ne h^{trig}_1=100$m): 200m'de "hedefi görüş açında tutmaya başla" (navigasyon), 100m'de "her şey sıkı kontrolde olsun" (fizik). Sensör kilidi **daha erken** başlıyor — son 100m'de zaten 5 kısıtla uğraşırken "hedefi ilk kez bul" yükü eklemek riskli olurdu.
+
+**Kanıt — kosinüs teoreminden türetim.** $u:=r_I-r_f$, $w:=C_{I\leftarrow B}\ell_B$. Kosinüs teoremi ($\|a-b\|^2$'yi iki yoldan açıp eşitleyerek): $a^\top b=\|a\|\|b\|\cos\alpha$. $\ell_B$ birim vektör ($\|\ell_B\|^2=\sin^2\delta^b+\cos^2\delta^b=1$, §12.5'teki $\|T_B\|=T$ ile aynı hesap) ve $C_{I\leftarrow B}$ ortogonal ($\|Cw\|=\|w\|$, çünkü $w^\top C^\top Cw=w^\top w$) olduğundan $\|w\|=1$, dolayısıyla $u^\top w=\|u\|\cos\alpha$. $\alpha\le\psi^{stc}\Leftrightarrow\cos\alpha\ge\cos\psi^{stc}$ (kosinüs azalan) yerine koyunca makalenin denklemi çıkar.
+
+> **$C_{I\leftarrow B}$ neden zorunlu, süs değil:** $u$ atalet çerçevesinde, $\ell_B$ gövde çerçevesinde — aynı çerçevede olmadan iç çarpım teoremi geçersiz. Sayısal örnek: $u=(80,0,60)$, 30° tutum, $\ell_B=(0.174,0,0.985)$'te doğru hesap $\alpha\approx13.1°$ verirken, dönüştürmeden yapılan yanlış hesap $\alpha\approx43.1°$ verir — tamamen anlamsız bir sayı.
+
+**$\delta^b,\phi^b$'nin gerçek işlevi burada ortaya çıkıyor:** §13.3'te dinamiğe hiç girmediklerini görmüştük — tek göründükleri yer bu kısıt. $\ell_B(\delta^b,\phi^b)$'nin fonksiyonu; optimizasyon, sensörü hedefe kilitli tutacak yönlendirmeyi burada belirliyor.
+
+### 15.4 Eq.(1c)/(1d) — Hız∧tilt tetiklemeli itki bandı çifti
+
+$$\text{(1c)}\;\; \big(\|v_I\|_2<v^{trig}_I\big)\wedge\big(\cos\theta_{trig}<1-2(q_2^2+q_3^2)\big)\Longrightarrow T^{stc_1}_{min}\le T\le T^{stc_1}_{max}$$
+$$\text{(1d)}\;\; \big(v^{trig}_I<\|v_I\|_2\big)\vee\big(1-2(q_2^2+q_3^2)<\cos\theta_{trig}\big)\Longrightarrow T^{stc_2}_{min}\le T\le T^{stc_2}_{max}$$
+
+| | $T_{min}$ | $T_{max}$ | Bant |
+|---|---|---|---|
+| (1c) dar (yavaş+dik) | 880 kN | 2200 kN | 1320 kN |
+| (1d) geniş (hızlı veya yatık) | 2640 kN | 6600 kN | 3960 kN |
+
+**Neden hem hız hem tilt gerekli (tek koşul yetmez):** "Sadece yavaş, hâlâ yatık" → düzeltme momenti için güç lazım, dar bant elini bağlar. "Sadece dik, hâlâ hızlı" → fren için güç lazım. Yalnızca **ikisi birden** sağlanınca kontrollü ince-ayar rejimine güvenle geçilebilir — gerçekten iki boyutlu bir güvenlik koşulu.
+
+#### 15.4.1 De Morgan zarafeti
+
+Makalenin formel gösterimi: (1c) tetikleyici $g_{trig3}<0\wedge g_{trig4}<0$; (1d) tetikleyici $-g_{trig3}<0\vee-g_{trig4}<0$. $-g<0\Leftrightarrow\neg(g<0)$ olduğundan (1d) **tam olarak** $\neg(1c$'nin tetikleyicisi$)$ — De Morgan yasası ($\neg(A\wedge B)=\neg A\vee\neg B$) birebir. Restoran analojisi: "kimlik VE rezervasyon" VIP masa kuralının "otherwise"i ayrıca tanımlanmaz, otomatik olarak "kimlik VEYA rezervasyon eksik." Roket her an **tam bir bantta** — boşluk yok, çakışma yok, tam bölüntü (partition).
+
+#### 15.4.2 Kod doğrulaması — çarpım=VE, toplam=VEYA
+
+```python
+thrust_stc_f = (spd_stc_trig_f * theta_stc_trig_f) * (thrust_max_f + thrust_min_f)   # Eq.(1c)
+thrust_stc_i = (spd_stc_trig_i + theta_stc_trig_i) * (thrust_max_i + thrust_min_i)   # Eq.(1d)
+```
+
+$a,b\ge0$ için **çarpım** $ab$ yalnızca **ikisi birden** sıfırdan farklıyken sıfırdan farklı (VE); **toplam** $a+b$ ise **biri** yeterli (VEYA). Doğrulama tablosu:
+
+| Durum | $a$ | $b$ | $a\times b$ | $a+b$ |
+|---|---|---|---|---|
+| İkisi de değil | 0 | 0 | 0 ✓ | 0 ✓ |
+| Sadece $a$ | 3 | 0 | 0 ✓ | 3 ✗ |
+| İkisi de | 3 | 5 | 15 ✓ | 8 ✓ |
+
+Toplam kullanılsaydı, roket **sadece** yavaşladığında (tilt hâlâ büyükken) sanki VE koşulu sağlanmış gibi dar-bant cezası devreye girerdi — yanlış.
+
+> **Makale ile kod tutarlı — PDF metin çıkarımı kaynaklı bir okuma hatası düzeltildi:** Makalenin Eq.(2c) formülünde iki tetikleyici terim **bitişik yazılmış** (çarpım — matbaada çarpı işareti görsel konumdan anlaşılır, PDF'den düz metne çevrilirken kaybolur), Eq.(2d)'de ise "+" **gerçek bir karakter** olduğu için korunmuş. İlk okumada ikisi de toplam gibi görünmüştü; dikkatli yeniden okumada (2c)'de hiç "+" olmadığı, sadece konumsal bitişiklik (çarpım) olduğu görüldü. **Kod, makalenin (2c) çarpım / (2d) toplam yapısını doğru uyguluyor — tutarsızlık yok.**
+
+### 15.5 Üç tetikleyicinin zaman çizelgesi (Bölüm IV'ten)
+
+| Zaman | Olay | Devreye giren |
+|---|---|---|
+| ~5.72 s | Hız ve tilt **aynı anda** eşik altına iner | (1d)→(1c): geniş banttan dara |
+| ~11.07 s | İrtifa $h^{trig}_2=200$m altına iner | (1b): line-of-sight kilitlenir |
+| ~15 s | İrtifa $h^{trig}_1=100$m altına iner | (1a): beşli demet |
+
+Anlatı: önce itki rejimi yumuşar → sonra sensör hedefe kilitlenir → en son fiziksel koridor daralır.
+
+### 15.6 D-GMSR burada neden gerçekten gerekli (sadece şık değil)
+
+$v_i=(0,0,-50)$, $\|v_i\|=50>v_{trig}=35$; $\theta_i=90°>\theta_{trig}=60°$ — roket **kesinlikle (1d) bölgesinde başlıyor**, $t\approx5.72$s'de **(1c)'ye geçmek zorunda.** SCP'nin gradyanı hesapladığı yörünge, bu anahtarlama sınırını **mutlaka geçiyor.**
+
+Min-tabanlı bir yaklaşım kullanılsaydı (§4.11 masking): yörünge hız açısından rahat ama tilt sınırındayken, gradyan **sadece tilt'ten** gelir, hız terimi sıfır gradyan alır — optimizasyon "hız da sınıra yaklaşıyor" bilgisini kaçırır, anahtarlama sınırına yaklaşırken pürüzsüz-olmayan bir sıçrama riski doğar. **D-GMSR'ın çarpım/toplam yapısı her iki bileşenden orantılı gradyan garanti ediyor** — teorik zarafet değil, bu spesifik geçişte SCP'nin başarısının ön koşulu.
+
+### 15.7 Tez entegrasyonu — Adım 3
+
+- [ ] **STC eşikleri yeniden türetilmeli:** $h^{trig}_{1,2}, v^{trig}_I,\theta_{trig}$ ve STC gövde limitleri ($\delta^{stc},v^{stc}_I,\omega^{stc},\theta^{stc},\gamma^{stc},\psi^{stc}$, $T^{stc_{1,2}}$) makalenin roket ölçeğine (100t/2.2–6.6MN) göre kalibre edilmiş — Angara 1.2'nin gerçek kütle/itki/geometrisine göre yeniden hesaplanmalı.
+- [ ] **Kademeli açma sırası netleşti** (§12.12.1 planına somut karşılık): önce Eq.(1a) tek başına (en basit, tek tetikleyici+VE), sonra Eq.(1c)/(1d) çifti (De Morgan yapısı kod tarafında hazır, §15.4.2), en son Eq.(1b) — çünkü line-of-sight, Angara modelinde fiziksel bir boresight aktüatörü (kamera/lidar gimbal) olup olmadığına bağlı; **tez kapsamına girip girmeyeceği açık bir tasarım kararı.**
+- [x] **Roll-ihmal kararıyla çelişki yok:** Dört STC'nin hiçbiri roll'e bağlı değil (hepsi tilt/hız/irtifa temelli, tilt zaten §13.2.1'de yaw'a kör kanıtlandı) — §7.9'daki roll-ihmal kararı bu kısıtları etkilemiyor.
+
+---
+
+
 ## Değişiklik geçmişi
 
 | Tarih | Ne eklendi |
 |---|---|
+| — | **Bölüm II.D — tüm adımlar.** Eq.(1a)-(1d), De Morgan kanıtı, kod çarpım/toplam doğrulaması (önceki "açık soru" PDF-okuma hatası olarak çözüldü), 3-adımlı zaman çizelgesi, masking-gereklilik argümanı, $\delta^{stc}$ birim erratası. |
 | — | **Bölüm II.B ve II.C — tüm adımlar.** Durum/kontrol kısıtları (tilt yaw-körlüğü kanıtı, glideslope konvansiyon çözümlemesi, azimut vacuous kanıtı), sınır koşulları (kütle asimetrisi, quaternion notasyon netleştirmesi, X kümesi ve çoklu-site bağlantısı). §7.2 errata genişletildi. |
 | — | **Bölüm II.A — Adım 1 (2/3, 3/3), Adım 3, Adım 4.** Dinamiğin beş satırı, aerodinamik, operatörler, nonkonvekslik haritası, tez entegrasyon analizi (mimari A, çoklu site, roll bulgusu §7.9). |
 | — | **Bölüm II.A — Adım 1, Bölüm 1/3.** Referans çerçeveleri, durum/kontrol vektörleri, Euler tekilliği (türetimle), gimbal parametrizasyonu. 2 inline SVG. |
