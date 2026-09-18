@@ -8,8 +8,8 @@ tags:
   - 6-DOF
   - bitirme-tezi
 kaynak: "Uzun, S., Açıkmeşe, B., and Carson III, J. M., “Sequential Convex Programming for 6-DoF Powered Descent Guidance with Continuous-Time Compound State-Triggered Constraints,” AIAA SCITECH 2025 Forum, 2025, p. 1895. https://doi.org/10.2514/6.2025-1895"
-bolum: "I. Introduction (tam)"
-durum: Adim-1-tamamlandi
+bolum: "I. Introduction (tam); II.A (tam); II.B (tam); II.C (tam)"
+durum: Bolum-II.C-tamamlandi
 ilgili:
   - "[[Wang_Song_2018_KAPSAMLI_NOT]]"
   - "[[Angara_1.2_6DOF_Simulink_Modeli]]"
@@ -1732,6 +1732,8 @@ $\tan(55°) = \cot(35°) = 1.428$ — yani ikisi birbirinin tersidir.
 >
 > Aynı durum STC glideslope'u için de geçerlidir: kod `gs_stc_cons = 90 - 5`, makale $\gamma^{stc} = 5°$.
 
+> **Ek not — neden bu iki adımda kaçınılmaz çıkıyor:** Denklemi $\gamma$ **düşeyden** ölçülüyor varsayarak tek adımda türetmeye çalışırsanız $d\le\tan(\gamma_{max})h$ çıkar — makalenin yazdığı $\tan(\gamma_{max})d\le h$'nin **tersi.** Ama $\gamma$'yı **yataydan** (klasik LCvx literatüründeki "glideslope angle" tanımı, örn. Açıkmeşe & Blackmore 2010) ölçülüyor kabul edince denklem **tek adımda, hiç ters çevirmeden** çıkıyor: $\tan\gamma=h/d \Rightarrow \tan(\gamma_{max})d\le h$. Yani makalenin **denklemi** yatay-konvansiyonu varsayıyor, ama **Tablo 3 + Fig.2 + kod** düşey-konvansiyonla tutarlı — makalenin kendi içinde iki farklı yerin birbiriyle örtüşmediği, tek satırlık bir yazım hatasından daha ince bir iç tutarsızlık.
+
 ### 7.3 Makale LCvx'i ne kanıtlar ne kullanır
 
 LCvx yalnızca Introduction'da literatür arka planı olarak anılır. Kanıt [12], [13], [15]–[19]'a havale edilir. Makalenin kendisi **SCP** tabanlıdır.
@@ -1899,12 +1901,15 @@ J = min t_f  veya  min yakıt       J = ? ← HÂLÂ AÇIK
 - [ ] `rk4_steps_dyn = 20` yeterli mi? Daha az alt-adımla sürekli-zaman garantisi ne kadar bozulur?
 - [ ] Amaç fonksiyonu değiştiğinde ölçekleme nasıl güncellenmeli?
 - [ ] Prox-linear yakınsama kriterine gerçekten ulaşılıyor mu (§6.11)?
+- [ ] $v_f$ değeri (küçük kalıntı hız) Angara 1.2 iniş takımı toleransına göre yeniden seçilmeli mi? (§14.4.1)
+- [ ] Çoklu-site mimarisi için $X$ kümesinin $r_f$ parametrik hale getirilmesi ne zaman ele alınacak? (§14.5, §12.12.5)
 
 ### 9.2 Analiz sırası — sonraki adımlar
 
-- [ ] **Bölüm II.A — Rocket Dynamics** (kodun `rl_dynamics` fonksiyonuyla birebir eşleşir)
-- [ ] Bölüm II.B, II.C — kısıtlar ve sınır koşulları
-- [ ] Bölüm II.D — compound STC'ler
+- [x] Bölüm II.A — Rocket Dynamics
+- [x] Bölüm II.B — kısıtlar
+- [x] Bölüm II.C — sınır koşulları
+- [ ] **Bölüm II.D — compound STC'ler** (sıradaki — makalenin asıl özgün katkısı, boresight line-of-sight kısıtının tam detayı)
 - [ ] Bölüm III.A — D-GMSR parametrizasyonu
 - [ ] Bölüm III.B — CT-SCvx (5 alt bölüm)
 - [ ] Bölüm IV — sayısal sonuçlar
@@ -2684,10 +2689,140 @@ ALT KATMAN (hizli, ~0.1 s)
 - [x] Roll ihmal kararı — açık varsayım olarak tez metnine yazılacak (§7.9)
 - [x] Tek nozzle kararı — makalenin yapısı alınacak
 
+---
+
+## 13. Bölüm II.B — General State and Control Constraints
+
+> **Durum:** Adım 1–4 tamamlandı. Dört durum + dört kontrol kısıtı; $g_x(x)\le0_{4\times1}$, $g_u(u)\le0_{4\times1}$ olarak tek vektörde toplanıyor.
+
+### 13.1 Neden "≤ 0" kalıbı — dört kısıtı tek sembole sıkıştırmak
+
+Kuru kütle kısıtının doğal yönü ($m_{dry}\le m$) tek başına ters; diğer üçü ($\theta,\omega,\gamma$) zaten "≤" formunda. Hepsini $g_x(x)\le0$ diye tek vektörde yazabilmek için kuru kütle de çevrilir:
+
+$$m_{dry}\le m(t) \;\Longleftrightarrow\; -m(t)\le -m_{dry}$$
+
+Bu salt bir gösterim işlemi — fiziksel anlam değişmiyor. Asıl gerekçesi: §5.4'teki CTCS ceza fonksiyonu $q_c(0,g)=\max(0,g)^2$, kısıtın "≤0" formunda olduğunu varsayıyor (ihlalse pozitif, değilse 0) — dört kısıt bu kalıba önceden sokulunca **tek formül, istisnasız** uygulanabiliyor.
+
+> Kodda bu dönüşüm **yapılmamış** (`X[0,:] >= m_dry`, doğal yön) — çözücü yönden bağımsız çalıştığı için sorun değil; "≤0" kalıbı yalnızca makalenin notasyonu ve CTCS formülü için gerekliydi.
+
+### 13.2 Dört durum kısıtı
+
+| # | Kısıt | Sınıf (§5.2) | Not |
+|---|---|---|---|
+| 1 | $m_{dry}\le m(t)$ | Afin | Düz duvar |
+| 2 | $\cos\theta_{max}\le1-2(q_2^2+q_3^2)$ | Konveks kuadratik | §13.2.1 |
+| 3 | $\|\omega_B\|_2\le\omega_{max}$ | Konik (SOC) | Genelde aktif değil ($\omega_{max}=90°/s$ cömert) |
+| 4 | $\tan(\gamma_{max})\|[e_1e_2]^\top r_I\|_2\le e_3^\top r_I$ | Konik (SOC) | §13.2.2, bkz. §7.2 errata |
+
+#### 13.2.1 Tilt kısıtının türetimi ve "yaw'a kör" doğrulaması
+
+$C_{B\leftarrow I}$'nin (3,3) elemanından: $\cos\theta=1-2(q_2^2+q_3^2)$. $\theta\le\theta_{max}\Leftrightarrow\cos\theta\ge\cos\theta_{max}$ (kosinüs azalan), düzenlenince yarım-açı özdeşliğiyle:
+
+$$\sqrt{q_2^2+q_3^2}\;\le\;\sin\!\Big(\frac{\theta_{max}}{2}\Big)$$
+
+$(q_2,q_3)$ düzleminde yarıçapı $\sin(\theta_{max}/2)$ olan bir **disk** — konveks kuadratik ailenin somut örneği. Kod: `sqrt((1-cos(theta_max))/2)`.
+
+**Yaw'a kör olduğunun kanıtı — tilt ve spin'i ayrı quaternion'lara ayırıp çarpma:**
+
+$$q_{tilt}=\big(\cos\tfrac\theta2,0,\sin\tfrac\theta2,0\big),\qquad q_{spin}=\big(\cos\tfrac\psi2,0,0,\sin\tfrac\psi2\big)$$
+
+Hamilton çarpımıyla birleştirince $q_2=\sin\tfrac\theta2\sin\tfrac\psi2$, $q_3=\sin\tfrac\theta2\cos\tfrac\psi2$, dolayısıyla:
+
+$$q_2^2+q_3^2=\sin^2\tfrac\theta2\big(\sin^2\tfrac\psi2+\cos^2\tfrac\psi2\big)=\sin^2\tfrac\theta2$$
+
+$\psi$ (yaw) $\sin^2+\cos^2=1$ özdeşliğiyle **tamamen iptal oluyor.** $(q_2,q_3)$ düzleminde nokta, yaw değiştikçe sabit yarıçaplı bir çember üzerinde gezer — merkeze uzaklığı (yani kısıtın ölçtüğü şey) hep aynı. Simetrik doğrulama: $q_2^2+q_4^2=\sin^2\tfrac\psi2$ — bu sefer $\theta$ iptal olup **saf yaw** kalıyor. Hangi çiftin toplandığı (($q_2,q_3$) vs ($q_2,q_4$)) hangi bilginin (tilt vs yaw) yakalandığını belirliyor.
+
+#### 13.2.2 Glideslope türetimi (bkz. §7.2 için konvansiyon uyuşmazlığı)
+
+$d=\|[e_1e_2]^\top r_I\|_2$ (yatay mesafe), $h=e_3^\top r_I$ (irtifa). $\gamma$ **yataydan** ölçülürse $\tan\gamma=h/d$, ve $\gamma\le\gamma_{max}\Rightarrow h\ge\tan(\gamma_{max})d$ — makalenin yazdığı forma tek adımda ulaşılır. Bu, koninin her sabit $h$'de dairesel bir kesiti olduğunu gösterir ($x^2+y^2\le(h\tan\gamma_{max})^2$) — üçüncü konveks aile (SOC).
+
+$e_3^\top r_I$ ve $[e_1e_2]^\top r_I$ notasyonu: $e_i$ standart birim vektörler; $e_3^\top r_I=(0,0,1)\cdot(x,y,z)=z$ (sadece $z$'yi geçiren süzgeç), $[e_1e_2]^\top r_I=(x,y)$ (sadece $x,y$'yi geçiren süzgeç, $z$ atılır). Matris çarpımı olarak yazılması, çözücüye özel bir "seçme" fonksiyonu tanımlamadan standart matris-vektör çarpımıyla verilebilmesi içindir.
+
+### 13.3 Dört kontrol kısıtı — ikisi anlamsız (vacuous)
+
+$$\|\delta^e\|_1\le\delta^e_{max},\;\; \|\phi^e\|_1\le\phi^e_{max},\;\; \|\delta^b\|_1\le\delta^b_{max},\;\; \|\phi^b\|_1\le\phi^b_{max}$$
+
+Kodda sadece **ikisi** uygulanmış:
+
+```python
+-delta_engine_max <= U[1,:] <= delta_engine_max      # delta^e
+-delta_boresight_max <= U[3,:] <= delta_boresight_max # delta^b
+```
+
+$\phi^e,\phi^b$ (azimut) **hiç yok** — hata değil, bilinçli gözden çıkarma.
+
+**Neden:** $\phi_{max}=180°$ demek $-180°\le\phi\le180°$, yani **tam bir tur** — çemberin her noktası. $\phi$ periyodiktir: $\phi=250°$ ile $\phi=-110°$ ($250-360$) **fiziksel olarak aynı yön.** Dinamiğe giren $\sin\phi,\cos\phi$ zaten periyodik, hangi aralıkta tutulursa tutulsun gerçek yön değişmez. $\delta$ ise gimbal mafsalının **gerçek mekanik limiti** (eksenden ne kadar saptığı) — bu yüzden aktif, $\phi$ (hangi yöne saptığı) ise dönel-simetrik mekanizmada sınırlanacak bir şey değil.
+
+| | $\delta$ (sapma) | $\phi$ (azimut) |
+|---|---|---|
+| Ölçtüğü | Eksenden ne kadar | Hangi yöne |
+| Fiziksel limit | Var (mafsal) | Yok (simetrik) |
+| Kısıt | Gerçek/aktif | Vacuous — eklense de sonucu değiştirmez |
+
+> **Tez için:** $\phi$ kısıtlarını eklemenize gerek yok; eklerseniz zararı olmaz (her zaman otomatik sağlanır), eklemezseniz kayıp yok.
+
+---
+
+## 14. Bölüm II.C — Boundary Conditions
+
+> **Durum:** Adım 1, 3, 4 tamamlandı (kısa bölüm, ayrı denklem-parçalama adımı gerektirmedi).
+
+### 14.1 On sınır koşulu, tek asimetri: kütle
+
+$$m(0)=m_i,\;\; \boxed{m(t_f)\ge m_{dry}},\;\; r_I(0)=r_i,\;r_I(t_f)=r_f,\;\; v_I(0)=v_i,\;v_I(t_f)=v_f$$
+$$q_{B\leftarrow I}(0)=q_{B\leftarrow I\,i},\;\;q_{B\leftarrow I}(t_f)=q_{B\leftarrow I\,f},\;\; \omega_B(0)=\omega_{B\,i},\;\;\omega_B(t_f)=\omega_{B\,f}$$
+
+**Kütlenin sonu neden eşitsizlik, diğerleri eşitlik:** $r_f,v_f,q_f,\omega_{Bf}$ tasarım gereksinimlerinden önceden bilinir (iniş noktası, hız, tutum hedefi). Ama $m(t_f)$ **çözümün sonucudur** — ne kadar yakıt harcandığı, önceden sabitlenemez; sabitlenirse "en az yakıtla in" optimizasyonunun anlamı kalmaz. Bu, §13.2'deki yol kısıtı $m_{dry}\le m(t)$'nin $t=t_f$ özel hali — makale sınır koşullarını (Eq. 3f, $X$ kümesi) yol kısıtlarından (Eq. 3c) yapısal olarak ayrı tutuyor.
+
+### 14.2 Notasyon netleştirmesi: $q_{B\leftarrow I\,i}$ neresi $i$, neresi $I$
+
+$q_{B\leftarrow I\,i}$'de **iki katmanlı** alt indeks var: $B\leftarrow I$ (hangi çerçeveden hangisine — quaternion'un kimliği) ve $i$ (hangi zaman anı — $t=0$). $I_i,I_f$ diye ayrı atalet çerçeveleri **yoktur**; $I$ tanım gereği sabit. $i/f$ etiketi tüm $q_{B\leftarrow I}(t)$ fonksiyonuna, $t=0$ ve $t=t_f$ anlarındaki değerini isimlendirmek için ekleniyor — $r_I(0)=r_i$'de $I$'nin $i/f$ ile tamamen değişmesinden farklı olarak, quaternion'da $B\leftarrow I$ korunmak zorunda olduğu için etiket yanına eklenip görsel çakışma yaratıyor.
+
+### 14.3 Quaternion sınır koşulu neden "kolay" — dinamikle tezat
+
+$q_{B\leftarrow I}(t_f)=q_f$ dört ayrı **afin eşitlik** ($q_1=1,q_2=0,q_3=0,q_4=0$) — 4 boyutta **tek nokta**, konvekslik testini otomatik geçer (içinde iki nokta yok). Bu, §12.10.1'de gördüğümüz $C(q)$'nun kuadratik/nonkonveks oluşuyla **tezat**: nonkonveks olan quaternion'un **zamanla nasıl değiştiği** (dinamik), belirli bir anda **hangi değeri aldığını sabitlemek** (sınır koşulu) değil.
+
+> Yol analojisi: arabanın gideceği yol eğri/zorlu olabilir (dinamik — nonkonveks), ama "varış adresi tam şurası" demek yolun şeklinden bağımsız basit bir hedef (sınır koşulu — konveks).
+
+### 14.4 Sayısal değerlerin okunması
+
+| Değişken | Başlangıç | Bitiş | Yorum |
+|---|---|---|---|
+| $m$ | 100 000 kg | $\ge85\,000$ kg | 15 t yakıt bandı, tam tüketim serbest |
+| $r_I$ | $(200,200,500)$ m | $(0,0,0)$ m | İniş noktası orijin |
+| $v_I$ | $(0,0,-50)$ m/s | $(0,0,-5)$ m/s | **Sıfır değil** — §14.4.1 |
+| $q_{B\leftarrow I}$ | $(\tfrac{\sqrt2}2,\tfrac{\sqrt2}2,0,0)$ | $(1,0,0,0)$ | 90° yatıktan dikeye |
+| $\omega_B$ | $(0,0,0)$ | $(0,0,0)$ | Segment öncesi zaten stabilize |
+
+#### 14.4.1 $v_f=(0,0,-5)$ neden tam sıfır değil
+
+İki olası gerekçe: **(a)** tam $v=0$'a inmek roketi yere değmeden hemen önce asılı bırakır — ilerleme kaydetmeden sadece yerçekimini dengelemek için yakıt yakmak (§8.2'deki gravity-loss tartışmasıyla aynı mekanizma); **(b)** gerçek iniş takımları (Apollo LM dahil) küçük bir çarpma hızını yutacak şekilde tasarlanır, tam sıfır hız hem gereksiz hem pratikte asimptotik (sonsuz zaman ister). **Tez için mühendislik dengesi:** küçük $|v_f|$ konforlu-ama-pahalı, büyük $|v_f|$ ucuz-ama-yapısal-risk.
+
+### 14.5 $X$ kümesi aslında iki nokta gibi
+
+Makale $X$'i "kapalı konveks küme" diye tanımlıyor ama somut hali $\{x(0)\}\times\{x(t_f):r_I=r_f,v_I=v_f,q=q_f,\omega_B=\omega_{Bf},m\ge m_{dry}\}$ — başlangıç tek sabit nokta, bitiş de neredeyse tek nokta (kütle yönünde gevşetilmiş bir ışın). Gerçek bir "çok noktalı bölge" (örn. iniş alanı serbest) yok.
+
+> **§12.12.5'teki çoklu-site fikrine bağlantı:** "İniş A veya B olabilir" istenirse, $X$'in $r_I(t_f)=r_f$ kısmı **iki ayrı sabit noktadan biri** için ayrı ayrı çözülmeli — önerdiğimiz "iki problemi çöz, iyisini seç" yaklaşımı, $X$ kümesi düzeyinde $r_f$'yi değiştirip tekrar çözmeye denk geliyor.
+>
+> **Literatür alternatifi:** [14] (Blackmore, Açıkmeşe & Scharf — minimum-landing-error) $r_f$'yi serbest bırakıp sapmayı maliyete ekliyor ("tam oraya inemiyorsan en az sapmayla in"). Bu makale sıkı eşitliği seçmiş — §8.2'deki Case D ile örtüşüyor.
+
+### 14.6 Kod eşleşmesi
+
+```python
+vehicle_cons += [
+    X[:, 0]     == x_init,          # 15 durumun HEPSI, t=0
+    X[1:-1, -1] == x_final[1:-1],   # indeks 1..13 (kutle VE y HARIC), t=tf
+]
+```
+
+`1:-1` dilimlemesi tam olarak **kütle** ($x_0$) ve **CTCS sayacı $y$** ($x_{14}$) dışındaki her şeyi sabitliyor — makalenin $m(t_f)$'i muaf tutmasıyla birebir örtüşüyor. $y$'nin de hariç tutulması tutarlı: $y$'nin kendi sınır koşulu ayrıca ele alınıyor ($y(t_f)-y(0)\le\epsilon_{LICQ}$, §5.4.6).
+
+
 ## Değişiklik geçmişi
 
 | Tarih | Ne eklendi |
 |---|---|
+| — | **Bölüm II.B ve II.C — tüm adımlar.** Durum/kontrol kısıtları (tilt yaw-körlüğü kanıtı, glideslope konvansiyon çözümlemesi, azimut vacuous kanıtı), sınır koşulları (kütle asimetrisi, quaternion notasyon netleştirmesi, X kümesi ve çoklu-site bağlantısı). §7.2 errata genişletildi. |
 | — | **Bölüm II.A — Adım 1 (2/3, 3/3), Adım 3, Adım 4.** Dinamiğin beş satırı, aerodinamik, operatörler, nonkonvekslik haritası, tez entegrasyon analizi (mimari A, çoklu site, roll bulgusu §7.9). |
 | — | **Bölüm II.A — Adım 1, Bölüm 1/3.** Referans çerçeveleri, durum/kontrol vektörleri, Euler tekilliği (türetimle), gimbal parametrizasyonu. 2 inline SVG. |
 | — | **Bölüm I (Introduction) — Adım 1 tamamlandı.** Ek olarak: kod deposu analizi (§6), errata (§7), tez entegrasyon planı (§8), terimler sözlüğü (§10), referans haritası (§11). 3 inline SVG. |
